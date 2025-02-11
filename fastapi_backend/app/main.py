@@ -4,8 +4,17 @@ from .utils import load_disease_data, match_symptoms
 # from .services import diagnose_symptoms
 from typing import List
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load disease data at startup
 diseases_dict = load_disease_data("dataset.csv")
@@ -28,7 +37,7 @@ class MatchedDiseasesResponse(BaseModel):
 def diagnose_symptoms(symptoms, diseases_dict):
     return match_symptoms(diseases_dict, symptoms)
 
-@app.post("/", response_model=MatchedDiseasesResponse)
+@app.post("/diagnosis", response_model=MatchedDiseasesResponse)
 def diagnose_patient(data: PatientData):
     if len(data.symptoms) < 3:
         raise HTTPException(status_code=400, detail="Please provide at least three symptoms.")
