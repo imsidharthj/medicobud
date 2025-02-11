@@ -12,7 +12,10 @@ function Form({ formData, formErrors, handleChange, handleSymptomChange, handleS
           value={symptom}
           onChange={(e) => handleSymptomChange(index, e.target.value)}
         />
-        {formErrors.symptoms[index] && <span>{formErrors.symptoms[index]}</span>}
+        {/* {formErrors.symptoms[index] && <span>{formErrors.symptoms[index]}</span>} */}
+        {formErrors.symptoms && formErrors.symptoms[index] && (
+          <span style={{ color: "red" }}>{formErrors.symptoms[index]}</span>
+        )}
       </div>
     ));
   };
@@ -27,7 +30,7 @@ function Form({ formData, formErrors, handleChange, handleSymptomChange, handleS
           value={formData.name}
           onChange={handleChange}
         />
-        {formErrors.name && <span>{formErrors.name}</span>}
+        {formErrors.name && <span style={{ color: 'red' }}>{formErrors.name}</span>}
       </div>
 
       <div>
