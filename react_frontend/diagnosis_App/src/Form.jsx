@@ -1,18 +1,46 @@
 import React from 'react';
+import { useDispatch, useSelector } from "react-redux";
+import { setName, setAge,setAllergies, setSymptom } from "./features/formSlice"
+// import store from "./features/store";
 
-function Form({ formData, formErrors, handleChange, handleSymptomChange, handleSubmit }) {
+// const store = configureStore({
+//   reducer: {
+//     form: formReducer,
+//   },
+// });
+
+function Form({ handleSubmit }) {
+  const dispatch = useDispatch();
+  const { name, age, allergies, symptoms, formErrors } = useSelector(
+    (state) => state.form
+  );
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === "name") {
+      dispatch(setName(value));
+    } else if (name === "age") {
+      dispatch(setAge(value));
+    } else if (name === "allergies") {
+      dispatch(setAllergies(value));
+    }
+  };
+
+  const handleSymptomChange = (index, value) => {
+    dispatch(setSymptom({ index, value }));
+  };
+
   // Render symptoms dynamically
   const renderSymptoms = () => {
-    return formData.symptoms.map((symptom, index) => (
+    return symptoms.map((symptom, index) => (
       <div key={index}>
         <label>Symptom {index + 1}:</label>
         <input
           type="text"
-          name={`symptom${index + 1}`}
+          // name={`symptom${index + 1}`}
           value={symptom}
           onChange={(e) => handleSymptomChange(index, e.target.value)}
         />
-        {/* {formErrors.symptoms[index] && <span>{formErrors.symptoms[index]}</span>} */}
         {formErrors.symptoms && formErrors.symptoms[index] && (
           <span style={{ color: "red" }}>{formErrors.symptoms[index]}</span>
         )}
@@ -27,7 +55,7 @@ function Form({ formData, formErrors, handleChange, handleSymptomChange, handleS
         <input
           type="text"
           name="name"
-          value={formData.name}
+          value={name}
           onChange={handleChange}
         />
         {formErrors.name && <span style={{ color: 'red' }}>{formErrors.name}</span>}
@@ -38,10 +66,10 @@ function Form({ formData, formErrors, handleChange, handleSymptomChange, handleS
         <input
           type="number"
           name="age"
-          value={formData.age}
+          value={age}
           onChange={handleChange}
         />
-        {formErrors.age && <span>{formErrors.age}</span>}
+        {formErrors.age && <span style={{ color: 'red' }}>{formErrors.age}</span>}
       </div>
 
       <div>
@@ -49,10 +77,10 @@ function Form({ formData, formErrors, handleChange, handleSymptomChange, handleS
         <input
           type="text"
           name="allergies"
-          value={formData.allergies}
+          value={allergies}
           onChange={handleChange}
         />
-        {formErrors.allergies && <span>{formErrors.allergies}</span>}
+        {formErrors.allergies && <span style={{ color: 'red' }}>{formErrors.allergies}</span>}
       </div>
 
       {renderSymptoms()}
