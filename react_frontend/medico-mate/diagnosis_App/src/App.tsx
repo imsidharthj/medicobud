@@ -6,7 +6,9 @@ import "./App.css";
 import { Navbar } from "./components/navbar";
 import { Sidebar } from "./components/sidebar";
 import { Footer } from "./components/footer";
+import HomePage from "./Homepage";
 import './index.css';
+import { useLocation } from 'react-router-dom';
 
 // const inter = Inter({ subsets: ["latin"] });
 
@@ -23,6 +25,9 @@ function App() {
     symptoms: ['', '', ''],
     allergies: '', // Dummy field
   });
+  const [showSymptom, setSoSymptom] = useState(false);
+  const lacation = useLocation();
+  console.log(lacation, "*********");
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,11 +85,14 @@ function App() {
   };
 
   return (
+    <>
+    <Navbar />
     <div className="relative min-h-screen flex flex-col">
-      <Navbar />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 px-4 pb-24 pt-2 md:px-8">
+        {lacation.pathname==="/diagnosis" ? 
+          (
+            <main className="flex-1 px-4 pb-24 pt-2 md:px-8">
           <div className="flex gap-8">
             {/* Form section */}
             <div className="flex-grow max-w-2xl">
@@ -112,9 +120,12 @@ function App() {
             )}
           </div>
         </main>
+          )
+        : <HomePage/>}
       </div>
       <Footer />
     </div>
+    </>
   );
 }
 

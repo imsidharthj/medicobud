@@ -5,8 +5,8 @@ import { Activity } from "lucide-react"
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
+    <header className="sticky top-0 z-50 w-full bg-background/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-16 items-center ml-10 mr-10">
         <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600">
           <Activity className="h-6 w-6" />
           Symptomate
