@@ -3,19 +3,23 @@ import { Card, CardContent } from "./components/ui/card";
 import { Activity, Brain, ClipboardCheck, Stethoscope } from "lucide-react";
 // import Link from "next/link";
 import { Link } from 'react-router-dom';
-import Image from "next/image";
+// import Image from "next/image";
 
 export default function HomePage() {
   return (
     <div className="mx-auto space-y-12 py-8 mr-4 ml-4">
       <section className="flex flex-col-reverse md:flex-row items-center gap-8">
         <div className="flex-1 space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">
+          {/* <h1 className="text-4xl font-bold tracking-tight">
             The symptom checker made by doctors for{" "}
             <span className="text-primary">adults</span>
+          </h1> */}
+          <h1 class="text-animated text-gray-900 font-serif text-6xl font-normal leading-none mb-6 ml-text-marg">
+            The symptom checker made by doctors for 
+            <h1 className="text-blue-500">You</h1>
           </h1>
-          <ul className="space-y-2">
-            <li className="flex items-center gap-2">
+          <ul className="space-y-2 font-serif,mono text-[20px]">
+            <li className="flex items-center gap-2 ">
               <CheckIcon className="h-5 w-5 text-green-500" />
               Analyze your symptoms
             </li>
@@ -32,28 +36,21 @@ export default function HomePage() {
               Get ready for your visit
             </li>
           </ul>
-          <div className="flex gap-4">
-            <Button asChild size="lg">
+          <div className="w-47 ml-10 mt-10" >
+            <Button variant="secondary" size="lg" className="w-full justify-start gap-2">
               <Link to="/diagnosis">Start Interview</Link>
             </Button>
-            <Button variant="outline" size="lg">
+            {/* <Button variant="outline" size="lg">
               Try Chatbot
-            </Button>
+            </Button> */}
           </div>
         </div>
         <div className="flex-1">
-          {/* <Image
-            src="/home/sid/Workspace/python/Full_Stack_project/react_frontend/medico-mate/diagnosis_App/public/medicomate.jpg"
-            alt="Medical illustration"
-            width={400}
-            height={400}
-            className="rounded-lg"
-          /> */}
-          <div className="border-1"><img src="/medicomate.jpg" alt="MediComate" className="w-full h-auto" />Medicomate</div>
+          <div className="shadow-2xl w-150 h-150 rounded-2xl"><img src="/homepage-form.png" alt="MediComate" className="w-full h-auto" /></div>
         </div>
       </section>
 
-      <section className="space-y-8">
+      <section className="space-y-8 mt-50">
         <h2 className="text-3xl font-bold text-center">How it works</h2>
         <div className="grid md:grid-cols-4 gap-6">
           {[
