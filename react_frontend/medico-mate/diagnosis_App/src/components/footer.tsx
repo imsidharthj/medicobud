@@ -1,75 +1,78 @@
-import { Facebook, Instagram, Twitter } from "lucide-react"
-// import Link from "next/link"
+import { Facebook, Instagram, Twitter } from "lucide-react";
 import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
-    <footer className="border-t mt-auto w-full">
-      <div className="container py-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+    <footer className="shadow-2xl mt-20 w-full pt-10 ml-20 rounded-2xl">
+      <div className="container mx-auto py-8 font-light">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* First Column */}
           <div>
-            <h3 className="font-semibold mb-3">Symptomate</h3>
-            <ul className="space-y-2">
+            <h3 className="font-semibold mb-10 text-4xl">MedicoMate</h3>
+            <ul className="space-y-5">
               <li>
-                <Link to="/about" className="text-sm text-muted-foreground hover:text-foreground">
+                <Link to="/about" className="hover:text-foreground ">
                   About us
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="text-sm text-muted-foreground hover:text-foreground">
-                  Get in touch
+                <Link to="/interview" className="text-muted-foreground hover:text-foreground">
+                  Interview
+                </Link>
+              </li>
+              <li>
+                <Link to="/blog" className="text-muted-foreground hover:text-foreground">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link to="/press-kit" className="text-muted-foreground hover:text-foreground">
+                  Press kit
                 </Link>
               </li>
             </ul>
           </div>
-          <div>
-            <h3 className="font-semibold mb-3">Legal</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/cookies" className="text-sm text-muted-foreground hover:text-foreground">
-                  Cookies Policy
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-3">Contact</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/contact" className="text-sm text-muted-foreground hover:text-foreground">
-                  Contact us
-                </Link>
-              </li>
-              <li>
-                <Link to="/support" className="text-sm text-muted-foreground hover:text-foreground">
-                  Support
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-3">Social</h3>
-            <div className="flex space-x-4">
-              <Link to="#" className="text-muted-foreground hover:text-foreground">
+
+          {/* Second Column */}
+          <div className="text-center md:text-left">
+            <h3 className="font-semibold mb-10 text-4xl">Get in touch</h3>
+            <div className="flex justify-center md:justify-start space-x-4">
+              <Link to="https://www.facebook.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
                 <Facebook className="h-5 w-5" />
               </Link>
-              <Link to="#" className="text-muted-foreground hover:text-foreground">
+              <Link to="https://www.twitter.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
                 <Twitter className="h-5 w-5" />
               </Link>
-              <Link to="#" className="text-muted-foreground hover:text-foreground">
+              <Link to="https://www.instagram.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
                 <Instagram className="h-5 w-5" />
               </Link>
             </div>
+            <p className="mt-5 text-muted-foreground text-[17px]">
+              contact@symptomate.com
+            </p>
+          </div>
+
+          {/* Third Column */}
+          <div>
+            <h3 className="font-semibold mb-10 text-4xl">Learn more</h3>
+            <p className="text-muted-foreground text-[17px]">
+              Symptom checker technology
+            </p>
+            <Link to="/terms" className="text-muted-foreground hover:text-foreground block mt-5">
+              Terms of service
+            </Link>
+            <Link to="/privacy" className="text-muted-foreground hover:text-foreground block mt-5">
+              Privacy Policy
+            </Link>
+            <Link to="/cookies" className="text-muted-foreground hover:text-foreground block mt-5">
+              Cookies Policy
+            </Link>
           </div>
         </div>
-        <div className="mt-8 border-t pt-4 text-center text-sm text-muted-foreground">Infermedica © 2025</div>
+        <div className="mt-8 pt-4 text-center text-muted-foreground">
+          Infermedica © 2025
+        </div>
       </div>
     </footer>
-  )
+  );
 }
-
