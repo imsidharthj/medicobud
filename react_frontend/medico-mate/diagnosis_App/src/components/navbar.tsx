@@ -9,7 +9,7 @@ export function Navbar() {
       <div className="flex h-16 items-center ml-10 mr-10">
         <Link to="/" className="flex items-center gap-2 font-bold text-xl text-blue-600">
           <Activity className="h-6 w-6" />
-          Symptomate
+          MedicoMate
         </Link>
         <nav className="flex items-center gap-6 ml-10">
           <Link to="/diagnosis" className="text-sm font-medium hover:text-blue-600 transition-colors">
@@ -29,7 +29,7 @@ export function Navbar() {
           <Button asChild variant="ghost">
             <Link to="/login">Sign in</Link>
           </Button>
-          <Button asChild>
+          <Button asChild variant="ghost">
             <Link to="/diagnosis">Take a Diagnosis</Link>
           </Button>
         </div>

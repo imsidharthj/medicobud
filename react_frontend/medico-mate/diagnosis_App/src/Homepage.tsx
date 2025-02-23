@@ -7,14 +7,12 @@ import { Link } from 'react-router-dom';
 
 export default function HomePage() {
   return (
-    <div className="mx-auto space-y-12 py-8 mr-4 ml-4">
-      <section className="flex flex-col-reverse md:flex-row items-center gap-8">
-        <div className="flex-1 space-y-4">
-          {/* <h1 className="text-4xl font-bold tracking-tight">
-            The symptom checker made by doctors for{" "}
-            <span className="text-primary">adults</span>
-          </h1> */}
-          <h1 class="text-animated text-gray-900 font-serif text-6xl font-normal leading-none mb-6 ml-text-marg">
+    <div className=" mx-auto space-y-12 py-8 mr-4">
+      <section className="container mx-auto grid grid-cols-2 justify-items-center gap-0">
+
+        {/* Left Content - Text and Buttons */}
+        <div className="w-150 h-150 bg-red-400">
+          <h1 className="text-animated text-gray-900 font-serif text-7xl font-normal leading-none mb-6 ml-text-marg">
             The symptom checker made by doctors for 
             <h1 className="text-blue-500">You</h1>
           </h1>
@@ -37,7 +35,7 @@ export default function HomePage() {
             </li>
           </ul>
           <div className="w-47 ml-10 mt-10" >
-            <Button variant="secondary" size="lg" className="w-full justify-start gap-2">
+            <Button variant="secondary" size="lg" className="w-full justify-start gap-2" style={{ backgroundColor: 'red' }}>
               <Link to="/diagnosis">Start Interview</Link>
             </Button>
             {/* <Button variant="outline" size="lg">
@@ -45,12 +43,14 @@ export default function HomePage() {
             </Button> */}
           </div>
         </div>
-        <div className="flex-1">
-          <div className="shadow-2xl w-150 h-150 rounded-2xl"><img src="/homepage-form.png" alt="MediComate" className="w-full h-auto" /></div>
+
+        {/* Right Content - Image */}
+        <div className="w-100 bg-blue-400">
+          <div className="shadow-2xl w-130 h-150 rounded-2xl"><img src="/homepage-form.png" alt="MediComate"/></div>
         </div>
       </section>
 
-      <section className="space-y-8 mt-50">
+      <section className="space-y-8 mt-50 mr-40">
         <h2 className="text-3xl font-bold text-center">How it works</h2>
         <div className="grid md:grid-cols-4 gap-6">
           {[

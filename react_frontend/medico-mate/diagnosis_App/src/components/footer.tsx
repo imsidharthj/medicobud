@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
-    <footer className="shadow-2xl mt-20 w-full pt-10 ml-20 rounded-2xl">
-      <div className="container mx-auto py-8 font-light">
+    <footer className="shadow-2xl mt-20 w-full pt-10 rounded-2xl">
+      <div className="container mx-auto py-8 font-light text-center">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* First Column */}
           <div>
