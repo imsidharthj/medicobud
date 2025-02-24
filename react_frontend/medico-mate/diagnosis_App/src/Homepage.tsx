@@ -7,52 +7,52 @@ import { Link } from 'react-router-dom';
 
 export default function HomePage() {
   return (
-    <div className="mx-auto space-y-12 py-8 mr-4 ml-4">
-      <section className="flex flex-col-reverse md:flex-row items-center gap-8">
-        <div className="flex-1 space-y-4">
-          {/* <h1 className="text-4xl font-bold tracking-tight">
-            The symptom checker made by doctors for{" "}
-            <span className="text-primary">adults</span>
-          </h1> */}
-          <h1 class="text-animated text-gray-900 font-serif text-6xl font-normal leading-none mb-6 ml-text-marg">
-            The symptom checker made by doctors for 
-            <h1 className="text-blue-500">You</h1>
-          </h1>
-          <ul className="space-y-2 font-serif,mono text-[20px]">
-            <li className="flex items-center gap-2 ">
-              <CheckIcon className="h-5 w-5 text-green-500" />
-              Analyze your symptoms
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckIcon className="h-5 w-5 text-green-500" />
-              Understand your health
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckIcon className="h-5 w-5 text-green-500" />
-              Plan your next steps
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckIcon className="h-5 w-5 text-green-500" />
-              Get ready for your visit
-            </li>
-          </ul>
-          <div className="w-47 ml-10 mt-10" >
-            <Button variant="secondary" size="lg" className="w-full justify-start gap-2">
-              <Link to="/diagnosis">Start Interview</Link>
-            </Button>
-            {/* <Button variant="outline" size="lg">
-              Try Chatbot
-            </Button> */}
+    <div className="">
+      <section className="flex items-center justify-center min-h-screen p-8">
+        <div className="grid grid-cols-2 bg-white shadow-2xl rounded-3xl overflow-hidden max-w-6xl w-full">
+          {/* Left Content - Text and Buttons */}
+          <div className="p-12">
+            <h1 className="text-gray-900 font-serif text-6xl font-normal leading-none mb-6">
+              The symptom checker made by Engineers for
+              <span className="text-blue-500"> You</span>
+            </h1>
+            <ul className="space-y-4 font-serif text-xl">
+              <li className="flex items-center gap-2">
+                <CheckIcon className="h-6 w-6 text-green-500" />
+                Analyze your symptoms
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckIcon className="h-6 w-6 text-green-500" />
+                Understand your health
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckIcon className="h-6 w-6 text-green-500" />
+                Plan your next steps
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckIcon className="h-6 w-6 text-green-500" />
+                Get ready for your visit
+              </li>
+            </ul>
+            <div className="mt-10">
+              <Button variant="secondary" size="lg" style={{ backgroundColor: '#1576d1' }}>
+                <Link to="/diagnosis">Start Interview</Link>
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex-1">
-          <div className="shadow-2xl w-150 h-150 rounded-2xl"><img src="/homepage-form.png" alt="MediComate" className="w-full h-auto" /></div>
+
+          {/* Right Content - Image */}
+          <div className="flex items-center justify-center bg-blue-50">
+            <div className="w-96 h-96 shadow-lg rounded-2xl overflow-hidden">
+              <img src="/homepage-form.png" alt="MediComate" className="w-full h-full object-cover" />
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="space-y-8 mt-50">
-        <h2 className="text-3xl font-bold text-center">How it works</h2>
-        <div className="grid md:grid-cols-4 gap-6">
+      <section className="flex flex-col items-center justify-center py-16 text-white mt-50">
+        <h2 className="text-4xl font-bold mb-12 text-blue-400">How it works</h2>
+        <div className="grid md:grid-cols-4 gap-8 w-full px-8">
           {[
             {
               icon: ClipboardCheck,
@@ -79,17 +79,15 @@ export default function HomePage() {
                 "Use the report to have a more informed discussion with your doctor",
             },
           ].map((item, index) => (
-            <Card key={index}>
-              <CardContent className="pt-6">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                  <item.icon className="h-6 w-6 text-primary" />
+            <div key={index} style={{ backgroundColor: '#1576d1' }} className=" bg-blue-500 rounded-lg shadow-xl p-6 hover:bg-green-400 transition duration-300">
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-700">
+                  <item.icon className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="font-semibold mb-2">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {item.description}
-                </p>
-              </CardContent>
-            </Card>
+                <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                <p className="text-sm text-white">{item.description}</p>
+              </div>
+            </div>
           ))}
         </div>
       </section>

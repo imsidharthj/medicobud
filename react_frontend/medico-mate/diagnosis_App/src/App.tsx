@@ -89,7 +89,7 @@ function App() {
     <Navbar />
     <div className="relative min-h-screen flex flex-col">
       <div className="flex">
-        <Sidebar />
+        {/* <Sidebar /> */}
         {lacation.pathname==="/diagnosis" ? 
           (
             <main className="flex-1 px-4 pb-24 pt-2 md:px-8">

@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
-    <footer className="shadow-2xl mt-20 w-full pt-10 ml-20 rounded-2xl">
-      <div className="container mx-auto py-8 font-light">
+    <footer className="shadow-2xl mt-20 w-full pt-10 rounded-2xl">
+      <div className="container mx-auto py-8 font-light text-center">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* First Column */}
-          <div>
+          <div className="md:text-left ml-20">
             <h3 className="font-semibold mb-10 text-4xl">MedicoMate</h3>
             <ul className="space-y-5">
               <li>
@@ -48,12 +48,12 @@ export function Footer() {
               </Link>
             </div>
             <p className="mt-5 text-muted-foreground text-[17px]">
-              contact@symptomate.com
+              contact@mediomate.com
             </p>
           </div>
 
           {/* Third Column */}
-          <div>
+          <div className="md:text-left mr-20">
             <h3 className="font-semibold mb-10 text-4xl">Learn more</h3>
             <p className="text-muted-foreground text-[17px]">
               Symptom checker technology
@@ -69,6 +69,8 @@ export function Footer() {
             </Link>
           </div>
         </div>
+
+        {/* Bottom Line statetement */}
         <div className="mt-8 pt-4 text-center text-muted-foreground">
           Infermedica © 2025
         </div>
