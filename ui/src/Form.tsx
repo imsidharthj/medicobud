@@ -21,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "./components/ui/card";
+import Autocomplete from './data/autocomplete';
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -140,7 +141,7 @@ function Form({
               )}
             />
 
-            {[0, 1, 2].map((index) => (
+            {/* {[0, 1, 2].map((index) => (
               <FormField
                 key={index}
                 control={form.control}
@@ -155,7 +156,22 @@ function Form({
                   </FormItem>
                 )}
               />
-            ))}
+            ))} */}
+
+            {/* Autocomplete for Symptoms */}
+            <FormItem>
+              <FormLabel>Symptoms</FormLabel>
+              <FormControl>
+                <Autocomplete
+                  selectedSymptoms={symptoms}
+                  onSymptomsChange={(updatedSymptoms) => {
+                    setSymptoms(updatedSymptoms);
+                    form.setValue("symptoms", updatedSymptoms);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
 
             <Button type="submit" className="w-full">
               Submit
