@@ -14,7 +14,7 @@ export function Navbar() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 font-bold text-xl text-[#1576d1]">
             <Activity className="h-6 w-6" />
-            MedicoMate
+            MedicoBud
           </Link>
 
           {/* Mobile Menu Button */}
