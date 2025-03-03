@@ -1,4 +1,3 @@
-import React from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -12,7 +11,6 @@ import {
   FormMessage,
 } from "./components/ui/form";
 import { Input } from "./components/ui/input";
-import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import {
   Card,
@@ -54,7 +52,12 @@ interface FormProps {
   setAge: (value: string) => void;
   setAllergies: (value: string) => void;
   setSymptoms: (value: string[]) => void;
-  handleSubmit: (e: React.FormEvent) => void;
+  handleSubmit: (data: {
+    name: string;
+    age: string;
+    symptoms: string[];
+    allergies?: string;
+  }) => void;
 }
 
 function Form({
@@ -62,7 +65,6 @@ function Form({
   age,
   allergies,
   symptoms,
-  formErrors,
   setName,
   setAge,
   setAllergies,
@@ -84,7 +86,7 @@ function Form({
     setAge(data.age);
     setAllergies(data.allergies || '');
     setSymptoms(data.symptoms);
-    handleSubmit(new Event('submit') as any);
+    handleSubmit(data);
   };
 
   return (
@@ -141,24 +143,6 @@ function Form({
               )}
             />
 
-            {/* {[0, 1, 2].map((index) => (
-              <FormField
-                key={index}
-                control={form.control}
-                name={`symptoms.${index}`}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Symptom {index + 1}</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))} */}
-
-            {/* Autocomplete for Symptoms */}
             <FormItem>
               <FormLabel>Symptoms</FormLabel>
               <FormControl>

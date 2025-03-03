@@ -6,7 +6,7 @@ import { Sidebar } from './components/sidebar';
 function UserLayout() {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
-  const [symptoms, setSymptoms] = useState(['', '', '']);
+  const [symptoms, setSymptoms] = useState<string[]>([]);
   const [allergies, setAllergies] = useState('');
   const [apiResponse, setApiResponse] = useState<any>(null);
   const [formErrors, setFormErrors] = useState({
@@ -17,29 +17,33 @@ function UserLayout() {
   });
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleSubmit = async (data: {
+    name: string;
+    age: string;
+    symptoms: string[];
+    allergies?: string;
+  }) => {
     const errors = {
-      name: '',
-      age: '',
-      symptoms: ['', '', ''],
+      name: data.name ? '' : 'Name is required',
+      age: data.age ? '' : 'Age is required',
+      symptoms: data.symptoms.length > 0 ? '' : 'At least one symptom is required',
       allergies: '',
     };
-
-    if (!name) errors.name = 'Name is required';
-    if (!age) errors.age = 'Age is required';
-    symptoms.forEach((symptom, index) => {
-      if (!symptom) {
-        errors.symptoms[index] = `Symptom ${index + 1} is required`;
-      }
-    });
-
-    if (errors.name || errors.age || errors.symptoms.some((error) => error)) {
-      setFormErrors(errors);
+  
+    // if (!data.name) errors.name = 'Name is required';
+    // if (!data.age) errors.age = 'Age is required';
+    // if (data.symptoms.length === 0) errors.symptoms = 'At least one symptom is required';
+  
+    if (errors.name || errors.age || errors.symptoms) {
+      setFormErrors({
+        name: errors.name,
+        age: errors.age,
+        symptoms: [errors.symptoms],
+        allergies: errors.allergies,
+      });
       return;
     }
-
+  
     try {
       const response = await fetch('http://127.0.0.1:8000/diagnosis', {
         method: 'POST',
@@ -47,19 +51,20 @@ function UserLayout() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name,
-          age: parseInt(age, 10),
-          symptoms: symptoms.filter((symptom) => symptom.trim() !== ''),
+          name: data.name,
+          age: parseInt(data.age, 10),
+          symptoms: data.symptoms.filter((symptom: string) => symptom.trim() !== ''),
+          // allergies: data.allergies || '',
         }),
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-
-      const data = await response.json();
-      setApiResponse(data);
-      navigate('/response', { state: { response: data } }); // Redirect to response page
+  
+      const responseData = await response.json();
+      setApiResponse(responseData);
+      navigate('/response', { state: { response: responseData } }); // Redirect to response page
     } catch (error) {
       console.error('Error fetching data:', error);
       setApiResponse({ error: 'Failed to fetch data from the API.' });
