@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; // Correct import
 import Form from './Form';
 import { Sidebar } from './components/sidebar';
@@ -8,13 +8,6 @@ function UserLayout() {
   const [age, setAge] = useState('');
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [allergies, setAllergies] = useState('');
-  const [apiResponse, setApiResponse] = useState<any>(null);
-  const [formErrors, setFormErrors] = useState({
-    name: '',
-    age: '',
-    symptoms: ['', '', ''],
-    allergies: '',
-  });
   const navigate = useNavigate();
 
   const handleSubmit = async (data: {
@@ -23,27 +16,6 @@ function UserLayout() {
     symptoms: string[];
     allergies?: string;
   }) => {
-    const errors = {
-      name: data.name ? '' : 'Name is required',
-      age: data.age ? '' : 'Age is required',
-      symptoms: data.symptoms.length > 0 ? '' : 'At least one symptom is required',
-      allergies: '',
-    };
-  
-    // if (!data.name) errors.name = 'Name is required';
-    // if (!data.age) errors.age = 'Age is required';
-    // if (data.symptoms.length === 0) errors.symptoms = 'At least one symptom is required';
-  
-    if (errors.name || errors.age || errors.symptoms) {
-      setFormErrors({
-        name: errors.name,
-        age: errors.age,
-        symptoms: [errors.symptoms],
-        allergies: errors.allergies,
-      });
-      return;
-    }
-  
     try {
       const response = await fetch('http://127.0.0.1:8000/diagnosis', {
         method: 'POST',
@@ -63,11 +35,9 @@ function UserLayout() {
       }
   
       const responseData = await response.json();
-      setApiResponse(responseData);
-      navigate('/response', { state: { response: responseData } }); // Redirect to response page
+      navigate('/response', { state: { response: {...responseData, status: response.status } } }); // Redirect to response page
     } catch (error) {
       console.error('Error fetching data:', error);
-      setApiResponse({ error: 'Failed to fetch data from the API.' });
     }
   };
 
@@ -75,7 +45,6 @@ function UserLayout() {
     <div className="flex min-h-screen bg-white">
       <Sidebar />
       <main className="flex-1 p-8">
-        {/* <div className="flex gap-8"> */}
           <div className="mx-auto max-w-3xl">
             <h1 className="text-3xl font-bold text-[#1576d1] mb-6">Patient Information Form</h1>
             <Form
@@ -83,7 +52,6 @@ function UserLayout() {
               age={age}
               allergies={allergies}
               symptoms={symptoms}
-              formErrors={formErrors}
               setName={setName}
               setAge={setAge}
               setAllergies={setAllergies}
@@ -91,7 +59,6 @@ function UserLayout() {
               handleSubmit={handleSubmit}
             />
           </div>
-        {/* </div> */}
       </main>
     </div>
   );

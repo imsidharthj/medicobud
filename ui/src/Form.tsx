@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from "./components/ui/card";
 import Autocomplete from './data/autocomplete';
+import { useState } from "react";
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -30,10 +31,10 @@ const formSchema = z.object({
   }).refine((val) => {
     const num = Number(val);
     return !isNaN(num) && num >= 1 && num <= 100;
-  }, {message: 'Age must be in range of 1 to 100.'}),
+  }, { message: 'Age must be in range of 1 to 100.' }),
   allergies: z.string().optional(),
-  symptoms: z.array(z.string()).min(1, {
-    message: "At least one symptom is required.",
+  symptoms: z.array(z.string()).min(3, {
+    message: "At least three symptoms  required.",
   }),
 });
 
@@ -42,12 +43,6 @@ interface FormProps {
   age: string;
   allergies: string;
   symptoms: string[];
-  formErrors: {
-    name: string;
-    age: string;
-    symptoms: string[];
-    allergies: string;
-  };
   setName: (value: string) => void;
   setAge: (value: string) => void;
   setAllergies: (value: string) => void;
@@ -81,12 +76,21 @@ function Form({
     },
   });
 
+  const [loading, setLoading] = useState(false);
+
   const onSubmit = (data: z.infer<typeof formSchema>) => {
-    setName(data.name);
-    setAge(data.age);
-    setAllergies(data.allergies || '');
-    setSymptoms(data.symptoms);
-    handleSubmit(data);
+    try {
+      setLoading(true);
+      setName(data.name);
+      setAge(data.age);
+      setAllergies(data.allergies || '');
+      setSymptoms(data.symptoms);
+      handleSubmit(data);
+    } catch (error) {
+      console.error("Error submitting form", error);
+    } finally {
+      console.log(setLoading(false));
+    }
   };
 
   return (
@@ -120,8 +124,8 @@ function Form({
                   <FormLabel>Age</FormLabel>
                   <FormControl>
                     <Input type="number" {...field}
-                          value={field.value}
-                          onChange={(e) => field.onChange(e.target.value)} />
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -157,8 +161,8 @@ function Form({
               <FormMessage />
             </FormItem>
 
-            <Button type="submit" className="w-full">
-              Submit
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Submitting...' : 'Submit'}
             </Button>
           </form>
         </ShadcnForm>
