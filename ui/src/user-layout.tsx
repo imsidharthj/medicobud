@@ -1,20 +1,21 @@
-import { useState } from 'react';
+// import { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; // Correct import
-import Form from './Form';
+// import Form from './Form';
 import { Sidebar } from './components/sidebar';
+import MedicalForm from './form/form-wizard';
 
 function UserLayout() {
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [symptoms, setSymptoms] = useState<string[]>([]);
-  const [allergies, setAllergies] = useState('');
+  // const [name, setName] = useState('');
+  // const [age, setAge] = useState('');
+  // const [symptoms, setSymptoms] = useState<string[]>([]);
+  // const [allergies, setAllergies] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const handleSubmit = async (data: {
     name: string;
     age: string;
     symptoms: string[];
-    allergies?: string;
+    allergies?: string[];
   }) => {
     try {
       const response = await fetch('http://127.0.0.1:8000/diagnosis', {
@@ -47,7 +48,7 @@ function UserLayout() {
       <main className="flex-1 p-8">
           <div className="mx-auto max-w-3xl">
             <h1 className="text-3xl font-bold text-[#1576d1] mb-6">Patient Information Form</h1>
-            <Form
+            {/* <Form
               name={name}
               age={age}
               allergies={allergies}
@@ -57,7 +58,10 @@ function UserLayout() {
               setAllergies={setAllergies}
               setSymptoms={setSymptoms}
               handleSubmit={handleSubmit}
-            />
+            /> */}
+          </div>
+          <div>
+            <MedicalForm handleFormSubmit={handleSubmit} />
           </div>
       </main>
     </div>
