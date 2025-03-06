@@ -45,9 +45,9 @@ function UserLayout() {
   return (
     <div className="flex min-h-screen bg-white">
       <Sidebar />
-      <main className="flex-1 p-8">
+      <main className="flex-1">
           <div className="mx-auto max-w-3xl">
-            <h1 className="text-3xl font-bold text-[#1576d1] mb-6">Patient Information Form</h1>
+            {/* <h1 className="text-3xl font-bold text-[#1576d1] mb-6">Patient Information Form</h1> */}
             {/* <Form
               name={name}
               age={age}

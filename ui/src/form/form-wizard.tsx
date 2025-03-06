@@ -8,8 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Autocomplete from '../data/autocomplete';
-import { title } from 'process';
-import { icons } from 'lucide-react';
+import {
+  User,
+  Calendar,
+  VenusAndMars,
+  Weight,
+  Thermometer,
+  Siren,
+  FileText,
+} from 'lucide-react';
+
 
 // Zod schema for form validation
 const formSchema = z.object({
@@ -56,19 +64,20 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
   });
 
   const steps = [
-    // { id: 1, title: 'Who', icon: 'user', description: 'Who is the survey for?' },
-    { id: 1, title: 'Name', icon: 'user', description: 'What is your name' },
-    { id: 2, title: 'Age', icon: 'calendar', description: 'How old are you?' },
-    { id: 3, title: 'Gender', icon: 'gender', description: 'What sex was originally listed on your birth certificate?' },
-    { id: 4, title: 'Symptoms', icon: 'symptoms', description: 'Add your symptoms' },
-    { id: 5, title: 'Allergies', icon: 'allergies', description: 'Do you have any allergies?' },
-    { id: 6, title: 'Summary', icon: 'summary', description: 'Review your information' },
-    // { id: 7, title: 'weight', icon: 'weight', description: 'What is your weight?' }
-  ];
+    { id: 1, title: 'Name', icon: <User />, description: 'What is your name?' },
+    { id: 2, title: 'Age', icon: <Calendar />, description: 'How old are you?' },
+    { id: 3, title: 'Gender', icon: <VenusAndMars />, description: 'What sex was originally listed on your birth certificate?' },
+    { id: 4, title: 'Weight', icon: <Weight />, description: 'What is your weight?' },
+    { id: 5, title: 'Symptoms', icon: <Thermometer />, description: 'Add your symptoms' },
+    { id: 6, title: 'Allergies', icon: <Siren />, description: 'Do you have any allergies?' },
+    { id: 7, title: 'Summary', icon: <FileText />, description: 'Review your information' },
+];
+
 
   const totalSteps = steps.length;
   
   const nextStep = () => {
+    // debugger
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
@@ -83,7 +92,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
   const onSubmit = (data: FormValues) => {
     console.log('Form submitted:', data);
     handleFormSubmit(data);
-    alert('Form submitted successfully!');
+    // alert('Form submitted successfully!');
   };
 
   const formData = watch();
@@ -104,7 +113,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 flex items-center justify-center">
-      <Card className="w-full max-w-4xl shadow-lg">
+      <Card className="w-[800px] shadow-lg">
         <CardContent className="p-0">
           <div className="flex flex-col md:flex-row">
             {/* Left Section - Form Wizard */}
@@ -257,8 +266,42 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                   </div>
                 )}
 
-                {/* Step 4: Symptoms */}
+                {/* Step 4: Weight */}
                 {currentStep === 4 && (
+                  <div className="space-y-4">
+                    <Label htmlFor="weight" className="text-base">Weight (kg)</Label>
+                    <Controller
+                      name="weight"
+                      control={control}
+                      rules={{ required: true, min: 20, max: 150 }}
+                      render={({ field }) => (
+                        <div className="relative">
+                          <Input
+                            {...field}
+                            id="weight"
+                            type="number"
+                            className="h-12"
+                            placeholder="Enter your weight"
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                          <div className="absolute right-3 top-3 text-gray-500">
+                            kg
+                          </div>
+                        </div>
+                      )}
+                    />
+                    {errors.weight && (
+                      <p className="text-sm text-red-500">
+                        {errors.weight.type === 'required' && 'Weight is required'}
+                        {errors.weight.type === 'min' && 'Weight must be at least 20 kg'}
+                        {errors.weight.type === 'max' && 'Weight must be at most 150 kg'}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 5: Symptoms */}
+                {currentStep === 5 && (
                   <div className="space-y-6">
                     <Autocomplete
                       selectedSymptoms={selectedSymptoms}
@@ -291,8 +334,8 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                   </div>
                 )}
 
-                {/* Step 5: Allergies */}
-                {currentStep === 5 && (
+                {/* Step 6: Allergies */}
+                {currentStep === 6 && (
                   <div className="space-y-6">
                     <Controller
                       name="allergies"
@@ -323,8 +366,8 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                   </div>
                 )}
 
-                {/* Step 6: Summary */}
-                {currentStep === 6 && (
+                {/* Step 7: Summary */}
+                {currentStep === 7 && (
                   <div className="space-y-6">
                     <Card>
                       <CardHeader>
@@ -360,23 +403,23 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
 
                 {/* Navigation Controls */}
                 <div className="mt-8 flex justify-between">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
                     onClick={prevStep}
                     disabled={currentStep === 1}
                   >
                     Back
                   </Button>
-                  
+
                   {currentStep < totalSteps ? (
-                    <Button 
-                      type="button" 
+                    <Button
+                      type="button"
                       onClick={nextStep}
                       disabled={
                         (currentStep === 2 && !formData.age) ||
                         (currentStep === 3 && !formData.gender) ||
-                        (currentStep === 4 && selectedSymptoms.length === 0)
+                        (currentStep === 4 && (!formData.weight || formData.weight < 20 || formData.weight > 150)) ||
+                        (currentStep === 5 && selectedSymptoms.length === 0)
                       }
                     >
                       Next
@@ -389,29 +432,29 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
 
               <h2 className="text-2xl font-bold mb-6 mt-6">Your Progress</h2>
               {/* Horizontal Step Indicator */}
-              <div className="mt-10">
+              <div className="mt-0">
                 <div className="flex justify-between mb-1">
                   {steps.map((step, index) => (
                     <div 
                       key={step.id} 
                       className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        currentStep >= step.id ? 'bg-white text-blue-500' : 'bg-blue-400 text-white'
+                        currentStep >= step.id ? 'bg-blue-500 text-white' : 'bg-white text-blue-400'
                       }`}
                     >
                       {index + 1}
                     </div>
                   ))}
                 </div>
-                <div className="relative h-1 bg-blue-400">
+                <div className="relative h-1 bg-white">
                   <div 
-                    className="absolute h-1 bg-white transition-all duration-300" 
+                    className="absolute h-1 bg-blue-400 transition-all duration-300" 
                     style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
                   ></div>
                 </div>
                 <div className="flex justify-between mt-1">
                   {steps.map((step) => (
                     <div key={step.id} className="w-8 text-center text-xs">
-                      {step.title}
+                      {step.icon}
                     </div>
                   ))}
                 </div>
@@ -421,13 +464,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
             {/* Right Section - Progress & Summary */}
             <div className="md:w-1/3 bg-blue-500 text-white p-6 md:p-8">
               
-              <div className="mt-8">
+              <div className="space-y-6">
                 <h3 className="text-xl font-semibold mb-4">Form Summary</h3>
                 
                 <div className="space-y-4">
                   <div className="bg-blue-400 rounded-lg p-4">
-                    <h4 className="font-medium mb-1">For</h4>
-                    <p className="text-blue-100">{formData.name ? 'Myself' : 'Someone else'}</p>
+                    <h4 className="font-medium mb-1">Name</h4>
+                    <p className="text-blue-100">{formData.name}</p>
                   </div>
                   
                   {formData.age && (
@@ -441,6 +484,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                     <div className="bg-blue-400 rounded-lg p-4">
                       <h4 className="font-medium mb-1">Gender</h4>
                       <p className="text-blue-100">{formData.gender.charAt(0).toUpperCase() + formData.gender.slice(1)}</p>
+                    </div>
+                  )}
+
+                  {formData.weight && (
+                    <div className="bg-blue-400 rounded-lg p-4">
+                      <h4 className="font-medium mb-1">Weight</h4>
+                      <p className="text-blue-100">{formData.weight} kg</p>
                     </div>
                   )}
                   
