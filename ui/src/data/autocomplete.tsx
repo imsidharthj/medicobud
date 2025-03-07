@@ -1,5 +1,6 @@
 import React, { useState, useEffect, KeyboardEvent } from "react";
 import uniqueSymptoms from "./autocomplete-symptoms";
+import { Search } from "lucide-react";
 
 interface AutocompleteProps {
   selectedSymptoms: string[];
@@ -53,7 +54,7 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   const selectSymptom = (symptom: string) => {
     if (!selectedSymptoms.includes(symptom)) {
       const updatedSymptoms = [...selectedSymptoms, symptom];
-      onSymptomsChange(updatedSymptoms); // Notify parent of changes
+      onSymptomsChange(updatedSymptoms);
     }
     setInputValue("");
     setShowSuggestions(false);
@@ -62,25 +63,22 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
 
   const removeSymptom = (index: number) => {
     const updatedSymptoms = selectedSymptoms.filter((_, i) => i !== index);
-    onSymptomsChange(updatedSymptoms); // Notify parent of changes
+    onSymptomsChange(updatedSymptoms);
   };
 
   return (
     <div className="max-w-md mx-auto">
       <div className="relative">
-        {/* Input Field */}
+        <Search className="absolute top-3 left-3 text-blue-500 pb-2" />
         <input
           type="text"
-          className="w-full border border-gray-300 rounded p-2"
+          className="w-full border border-blue-500 rounded p-2 pl-10"
           placeholder="Enter a symptom..."
           value={inputValue}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-          }}
+          onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
         />
 
-        {/* Suggestions Dropdown */}
         {showSuggestions && filteredSuggestions.length > 0 && (
           <ul className="absolute left-0 right-0 bg-white border border-gray-300 shadow-md max-h-40 overflow-y-auto z-10 rounded">
             {filteredSuggestions.map((symptom, index) => (
@@ -98,7 +96,6 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
         )}
       </div>
 
-      {/* Display Selected Symptoms */}
       <div className="flex flex-wrap gap-2 mt-2">
         {selectedSymptoms.map((symptom, index) => (
           <div

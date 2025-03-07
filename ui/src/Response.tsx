@@ -16,6 +16,14 @@ function Response() {
     );
   }
 
+  if(response.status === 404){
+    <Card className="p-4 bg-white shadow-lg rounded-lg max-w-xl mx-auto mt-8">
+      <CardContent>
+        <h1>No diseases matched the entered symptoms.</h1>
+      </CardContent>
+    </Card>
+  }
+
   if (response.error) {
     return (
       <Card className="p-4 bg-white shadow-lg rounded-lg max-w-xl mx-auto mt-8">
