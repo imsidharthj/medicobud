@@ -1,5 +1,6 @@
 import React, { useState, useEffect, KeyboardEvent } from "react";
 import uniqueSymptoms from "./autocomplete-symptoms";
+import { Search } from "lucide-react";
 
 interface AutocompleteProps {
   selectedSymptoms: string[];
@@ -68,9 +69,10 @@ const Autocomplete: React.FC<AutocompleteProps> = ({
   return (
     <div className="max-w-md mx-auto">
       <div className="relative">
+        <Search className="absolute top-3 left-3 text-blue-500 pb-2" />
         <input
           type="text"
-          className="w-full border border-gray-300 rounded p-2"
+          className="w-full border border-blue-500 rounded p-2 pl-10"
           placeholder="Enter a symptom..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
