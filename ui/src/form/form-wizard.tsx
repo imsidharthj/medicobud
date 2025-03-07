@@ -44,7 +44,8 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 interface MedicalFormProps {
-  handleFormSubmit: (data: FormValues) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleFormSubmit: (data: any) => void;
 }
 
 const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
@@ -60,7 +61,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
       allergies: [],
       symptoms: [],
     },
-    mode: 'onChange'
+    // mode: 'onChange'
   });
 
   const steps = [
@@ -92,7 +93,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
   const onSubmit = (data: FormValues) => {
     console.log('Form submitted:', data);
     handleFormSubmit(data);
-    // alert('Form submitted successfully!');
+    alert('Form submitted successfully!');
   };
 
   const formData = watch();
@@ -425,7 +426,8 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                       Next
                     </Button>
                   ) : (
-                    <Button type="submit">Submit</Button>
+                    // <Button type="submit">Submit</Button>
+                    <div onClick={() => handleFormSubmit(control._formValues)} className='cursor-pointer'>Submit</div>
                   )}
                 </div>
               </form>
