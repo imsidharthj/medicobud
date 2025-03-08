@@ -1,9 +1,10 @@
 import { Button } from "./components/ui/button";
-import { Card, CardContent } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Activity, Brain, ClipboardCheck, Stethoscope } from "lucide-react";
 // import Link from "next/link";
 import { Link } from 'react-router-dom';
 // import Image from "next/image";
+import { motion } from "framer-motion";
 
 export default function HomePage() {
   return (
@@ -35,7 +36,7 @@ export default function HomePage() {
               </li>
             </ul>
             <div className="mt-10">
-              <Button variant="secondary" size="lg" style={{ backgroundColor: '#1576d1' }}>
+              <Button variant="blueButton" size="lg">
                 <Link to="/diagnosis">Start Interview</Link>
               </Button>
             </div>
@@ -50,8 +51,89 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="flex flex-col items-center justify-center py-16 text-white mt-50">
-        <h2 className="text-4xl font-bold mb-12 text-blue-400">How it works</h2>
+      <section className="py-16 bg-white">
+      <div className="container mx-auto px-4">
+        <h2 className="text-3xl font-bold text-center mb-12">How it works</h2>
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Step 1 */}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] w-[350px] h-[500px]">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                  1. Open Medicobud when you start feeling unwell
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center items-end h-[300px]">
+                <img
+                  src="/user-sick.png"
+                  alt="User feeling unwell"
+                  className="object-contain w-[260px] m-auto rounded-2xl mt-12"
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Step 2 */}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] border-none w-[350px] h-[500px]">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                  2. Select your risk factors
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center items-end h-[300px]">
+                <img
+                  src="/mobile-form.png"
+                  alt="Mobile form for risk factors"
+                  className="object-contain w-[260px] m-auto rounded-2xl"
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Step 3 */}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] border-none w-[350px] h-[500px]">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                  3. Get response for possible conditions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center items-end h-[300px]">
+                <img
+                  src="/mobile-response.png"
+                  alt="Mobile response"
+                  className="object-contain w-[260px] m-auto rounded-2xl"
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Optional: Add a CTA Button */}
+        {/* <div className="flex justify-center mt-12">
+          <Button
+            variant="default"
+            size="lg"
+            className="bg-[#2D3648] text-white hover:bg-[#1E2636] transition-colors"
+          >
+            Get Started
+          </Button>
+        </div> */}
+      </div>
+    </section>
+
+      <section className="flex flex-col items-center justify-center py-16 text-white">
+        <h2 className="text-4xl font-bold mb-12 text-blue-400">Features</h2>
         <div className="grid md:grid-cols-4 gap-8 w-full px-8">
           {[
             {
