@@ -1,139 +1,147 @@
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
-import { Activity, Brain, ClipboardCheck, Stethoscope } from "lucide-react";
-// import Link from "next/link";
+import { Activity, Brain, ClipboardCheck, Stethoscope, Check } from "lucide-react";
 import { Link } from 'react-router-dom';
-// import Image from "next/image";
 import { motion } from "framer-motion";
 
 export default function HomePage() {
   return (
     <div className="">
-      <section className="flex items-center justify-center min-h-screen p-8">
-        <div className="grid grid-cols-2 bg-white shadow-2xl rounded-3xl overflow-hidden max-w-6xl w-full">
+      <section className="flex items-center justify-center min-h-screen p-4 md:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 bg-white rounded-3xl overflow-hidden max-w-6xl w-full">
           {/* Left Content - Text and Buttons */}
-          <div className="p-12">
-            <h1 className="text-gray-900 font-serif text-6xl font-normal leading-none mb-6">
+          <div className="p-6 md:p-12">
+            <h1 className="text-gray-900 font-serif text-3xl md:text-6xl font-normal leading-none mb-6">
               The symptom checker made by Engineers for
               <span className="text-blue-500"> You</span>
             </h1>
-            <ul className="space-y-4 font-serif text-xl">
-              <li className="flex items-center gap-2">
-                <CheckIcon className="h-6 w-6 text-green-500" />
-                Analyze your symptoms
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckIcon className="h-6 w-6 text-green-500" />
-                Understand your health
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckIcon className="h-6 w-6 text-green-500" />
-                Plan your next steps
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckIcon className="h-6 w-6 text-green-500" />
-                Get ready for your visit
-              </li>
+            <ul className="space-y-4 text-base md:text-xl">
+              {[
+                "Analyze your symptoms",
+                "Understand your health",
+                "Plan your next steps",
+                "Get ready for your visit",
+              ].map((item, index) => (
+                <li key={index} className="flex items-center gap-2">
+                  <Check className="h-6 w-6 text-green-500" />
+                  {item}
+                </li>
+              ))}
             </ul>
-            <div className="mt-10">
+            <div className="mt-6 md:mt-10">
               <Button variant="blueButton" size="lg">
                 <Link to="/diagnosis">Start Interview</Link>
               </Button>
             </div>
           </div>
-
           {/* Right Content - Image */}
-          <div className="flex items-center justify-center bg-blue-50">
-            <div className="w-96 h-96 shadow-lg rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-center">
+            <div className="max-w-6xl h-auto md:h-125 overflow-hidden">
               <img src="/homepage-form.png" alt="MediComate" className="w-full h-full object-cover" />
             </div>
           </div>
         </div>
       </section>
 
-      <section className="py-16 bg-white">
-      <div className="container mx-auto px-4">
-        <h2 className="text-3xl font-bold text-center mb-12">How it works</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Step 1 */}
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] w-[350px] h-[500px]">
-              <CardHeader>
-                <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                  1. Open Medicobud when you start feeling unwell
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center items-end h-[300px]">
-                <img
-                  src="/user-sick.png"
-                  alt="User feeling unwell"
-                  className="object-contain w-[260px] m-auto rounded-2xl mt-12"
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
+      <section className="flex items-center justify-center p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 bg-white  overflow-hidden max-w-6xl w-full">
+          {/* Left Text Section */}
+          <div className="container mx-auto px-8 py-12 md:py-16 flex flex-col justify-center w-[750px]">
+            <h1 className="text-[50px] text-[#2D3648] mb-6 font-serif">About Medicobud</h1>
+            <p className="text-black text-xl leading-relaxed line-clamp-7">
+              Medicobud is a free symptom checker tool that uses a healthcare database to help you understand your symptoms and possible conditions.
+              It is designed to be easy to use and provide you with the best possible information to help you understand your symptoms.
+              We want to help you make informed decisions about your health and well-being.
+              Our goal is to provide you with accurate and reliable information to help you take control of your health.
+            </p>
+            <div className="mt-6 py-3 text-black rounded-lg transition duration-300">
+              Learn More <span className="text-blue-500 cursor-pointer">about us</span>
+            </div>
+          </div>
 
-          {/* Step 2 */}
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] border-none w-[350px] h-[500px]">
-              <CardHeader>
-                <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                  2. Select your risk factors
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center items-end h-[300px]">
-                <img
-                  src="/mobile-form.png"
-                  alt="Mobile form for risk factors"
-                  className="object-contain w-[260px] m-auto rounded-2xl"
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Step 3 */}
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
-            <Card className="rounded-2xl shadow-lg bg-[#F5EFE0] border-none w-[350px] h-[500px]">
-              <CardHeader>
-                <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                  3. Get response for possible conditions
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center items-end h-[300px]">
-                <img
-                  src="/mobile-response.png"
-                  alt="Mobile response"
-                  className="object-contain w-[260px] m-auto rounded-2xl"
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
+          {/* Right Image Section */}
+          <div className="flex items-center justify-center">
+            <img
+              src="/homepage-contact-us.png"
+              alt="About Medicobud"
+              className="w-60 h-90 object-cover"
+            />
+          </div>
         </div>
+      </section>
 
-        {/* Optional: Add a CTA Button */}
-        {/* <div className="flex justify-center mt-12">
-          <Button
-            variant="default"
-            size="lg"
-            className="bg-[#2D3648] text-white hover:bg-[#1E2636] transition-colors"
-          >
-            Get Started
-          </Button>
-        </div> */}
-      </div>
-    </section>
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <h2 className="text-6xl font-serif mb-12 text-black text-center">How it works</h2>
+          <div className="grid md:grid-cols-3 gap-8 text-center font-sans">
+            {/* Step 1 */}
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <Card className="rounded-2xl bg-[#F5EFE0] w-[350px] h-[500px]">
+                <CardHeader>
+                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                    1. Open Medicobud when you start feeling unwell
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex justify-center items-end h-[300px]">
+                  <img
+                    src="/user-sick.png"
+                    alt="User feeling unwell"
+                    className="object-contain w-[260px] m-auto rounded-2xl mt-19"
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
 
-      <section className="flex flex-col items-center justify-center py-16 text-white">
-        <h2 className="text-4xl font-bold mb-12 text-blue-400">Features</h2>
+            {/* Step 2 */}
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <Card className="rounded-2xl bg-[#F5EFE0] border-none w-[350px] h-[500px]">
+                <CardHeader>
+                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                    2. Select your risk factors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex justify-center items-end h-[300px]">
+                  <img
+                    src="/mobile-form.png"
+                    alt="Mobile form for risk factors"
+                    className="object-contain w-[260px] m-auto rounded-2xl mt-4"
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Step 3 */}
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 300 }}
+            >
+              <Card className="rounded-2xl bg-[#F5EFE0] border-none w-[350px] h-[500px]">
+                <CardHeader>
+                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
+                    3. Get response for possible conditions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex justify-center items-end h-[300px]">
+                  <img
+                    src="/mobile-response.png"
+                    alt="Mobile response"
+                    className="object-contain w-[260px] m-auto rounded-2xl mt-3"
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <section className="flex flex-col items-center justify-center py-30 px-30 text-white">
+        <h2 className="text-6xl font-serif mb-12 text-black">Features</h2>
         <div className="grid md:grid-cols-4 gap-8 w-full px-8">
           {[
             {
@@ -161,7 +169,7 @@ export default function HomePage() {
                 "Use the report to have a more informed discussion with your doctor",
             },
           ].map((item, index) => (
-            <div key={index} className=" bg-[#1576d1] rounded-lg shadow-xl p-6 hover:bg-green-400 transition duration-300">
+            <div key={index} className=" bg-blue-500 rounded-lg shadow-xl p-6 hover:bg-green-400 transition duration-300">
               <div className="flex flex-col items-center text-center">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-700">
                   <item.icon className="h-6 w-6 text-white" />
@@ -177,21 +185,21 @@ export default function HomePage() {
   );
 }
 
-function CheckIcon(props: React.ComponentProps<"svg">) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
+// function CheckIcon(props: React.ComponentProps<"svg">) {
+//   return (
+//     <svg
+//       {...props}
+//       xmlns="http://www.w3.org/2000/svg"
+//       width="24"
+//       height="24"
+//       viewBox="0 0 24 24"
+//       fill="none"
+//       stroke="currentColor"
+//       strokeWidth="2"
+//       strokeLinecap="round"
+//       strokeLinejoin="round"
+//     >
+//       <polyline points="20 6 9 17 4 12" />
+//     </svg>
+//   );
+// }
