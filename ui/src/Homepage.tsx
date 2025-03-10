@@ -1,6 +1,6 @@
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
-import { Activity, Brain, ClipboardCheck, Stethoscope, Check } from "lucide-react";
+import { Activity, Brain, ClipboardCheck, BookOpenText, Check } from "lucide-react";
 import { Link } from 'react-router-dom';
 import { motion } from "framer-motion";
 
@@ -70,79 +70,67 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-6xl font-serif mb-12 text-black text-center">How it works</h2>
-          <div className="grid md:grid-cols-3 gap-8 text-center font-sans">
-            {/* Step 1 */}
+      <section className="py-16 px-4 sm:px-8 md:px-16 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif mb-12 text-black text-center">How it works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center font-sans">
+            {[
+            ["Open Medicobud when you start feeling unwell", "/user-sick.png"], 
+            ["Select your risk factors", "/homepage-mobile-form-2.png"], 
+            ["Get response for possible conditions", "/homepage-mobile-response-2.png"]
+            ].map((item) => (
             <motion.div
               whileHover={{ scale: 1.05 }}
               transition={{ type: "spring", stiffness: 300 }}
             >
-              <Card className="rounded-2xl bg-[#F5EFE0] w-[350px] h-[500px]">
-                <CardHeader>
-                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                    1. Open Medicobud when you start feeling unwell
+              <Card className="flex flex-col justify-between items-center bg-[#F5EFE0] rounded-2xl mx-auto w-full max-w-xs h-[500px] pt-4">
+                <CardHeader className="flex-shrink-0">
+                  <CardTitle className="text-base sm:text-lg md:text-xl lg:text-xl font-bold text-[#2D3648]">
+                    {item[0]}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex justify-center items-end h-[300px]">
+                <CardContent>
                   <img
-                    src="/user-sick.png"
+                    src={item[1]}
                     alt="User feeling unwell"
-                    className="object-contain w-[260px] m-auto rounded-2xl mt-19"
+                    className="object-contain h-75 rounded-lg w-auto mx-auto"
                   />
                 </CardContent>
               </Card>
             </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-            {/* Step 2 */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 300 }}
-            >
-              <Card className="rounded-2xl bg-[#F5EFE0] border-none w-[350px] h-[500px]">
-                <CardHeader>
-                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                    2. Select your risk factors
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex justify-center items-end h-[300px]">
-                  <img
-                    src="/mobile-form.png"
-                    alt="Mobile form for risk factors"
-                    className="object-contain w-[260px] m-auto rounded-2xl mt-4"
-                  />
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Step 3 */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 300 }}
-            >
-              <Card className="rounded-2xl bg-[#F5EFE0] border-none w-[350px] h-[500px]">
-                <CardHeader>
-                  <CardTitle className="text-xl font-semibold text-[#2D3648]">
-                    3. Get response for possible conditions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex justify-center items-end h-[300px]">
-                  <img
-                    src="/mobile-response.png"
-                    alt="Mobile response"
-                    className="object-contain w-[260px] m-auto rounded-2xl mt-3"
-                  />
-                </CardContent>
-              </Card>
-            </motion.div>
+      <section className="items-center justify-center py-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 max-w-5xl">
+          <div className="flex items-center justify-center">
+            <img
+              src="/homepage-medical-library.png"
+              alt="About Medicobud"
+              className="w-70 h-50 object-cover"
+            />
+          </div>
+          <div className="container mx-auto md:py-16 flex flex-col justify-center w-[750px]">
+            <h1 className="text-[50px] text-[#2D3648] mb-6 font-serif">Medical library</h1>
+            <p className="text-black text-xl leading-relaxed line-clamp-6">
+              The right health information leads to the right health actions.<br/>
+              This library is stocked with tips that can help you stay well and facts<br/> 
+              about medical conditions.<br/>
+              Just like Medicobud, everything you’ll learn here is based on our doctors’ clinical 
+              experience and the latest research.
+            </p>
+            <div className="mt-6 py-3 text-black rounded-lg transition duration-300">
+              Browse Now <span className="text-blue-500 cursor-pointer">click here</span>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="flex flex-col items-center justify-center py-30 px-30 text-white">
         <h2 className="text-6xl font-serif mb-12 text-black">Features</h2>
-        <div className="grid md:grid-cols-4 gap-8 w-full px-8">
+        <div className="grid md:grid-cols-2 gap-20 w-full px-50">
           {[
             {
               icon: ClipboardCheck,
@@ -163,10 +151,10 @@ export default function HomePage() {
                 "Receive a detailed analysis of possible conditions and next steps",
             },
             {
-              icon: Stethoscope,
-              title: "Doctor Visit",
+              icon: BookOpenText,
+              title: "Keep YourSelf Informed",
               description:
-                "Use the report to have a more informed discussion with your doctor",
+                "Use Our medical library to read about various diseases and conditions and their remedies",
             },
           ].map((item, index) => (
             <div key={index} className=" bg-blue-500 rounded-lg shadow-xl p-6 hover:bg-green-400 transition duration-300">
@@ -184,22 +172,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-// function CheckIcon(props: React.ComponentProps<"svg">) {
-//   return (
-//     <svg
-//       {...props}
-//       xmlns="http://www.w3.org/2000/svg"
-//       width="24"
-//       height="24"
-//       viewBox="0 0 24 24"
-//       fill="none"
-//       stroke="currentColor"
-//       strokeWidth="2"
-//       strokeLinecap="round"
-//       strokeLinejoin="round"
-//     >
-//       <polyline points="20 6 9 17 4 12" />
-//     </svg>
-//   );
-// }
