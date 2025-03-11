@@ -60,8 +60,8 @@ const config: Config = {
         "accordion-up": "accordion-up 0.2s ease-out",
       },
       fontFamily: {
-        heading: ['"Lora"', 'serif'],
-        body: ['"Inter"', 'sans-serif'],
+        heading: ['Lora', 'serif'],
+        body: ['Inter', 'sans-serif'],
       },
 	  fontSize: {
         'heading-title': '4.9rem',
