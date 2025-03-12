@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Twitter } from "lucide-react";
+import { Instagram, Linkedin, Github } from "lucide-react";
 import { Link } from 'react-router-dom';
 
 export function Footer() {
@@ -37,13 +37,13 @@ export function Footer() {
           <div className="text-center md:text-left">
             <h3 className="font-semibold mb-10 text-4xl">Get in touch</h3>
             <div className="flex justify-center md:justify-start space-x-4">
-              <Link to="https://www.facebook.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
-                <Facebook className="h-5 w-5" />
+              <Link to="https://www.linkedin.com/in/imsidharthj/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                <Linkedin className="h-5 w-5" />
               </Link>
-              <Link to="https://www.twitter.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
-                <Twitter className="h-5 w-5" />
+              <Link to="https://github.com/imsidharthj" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                <Github className="h-5 w-5" />
               </Link>
-              <Link to="https://www.instagram.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+              <Link to="https://www.instagram.com/its_sid_zyn" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
                 <Instagram className="h-5 w-5" />
               </Link>
             </div>
