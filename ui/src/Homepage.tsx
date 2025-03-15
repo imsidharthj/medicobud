@@ -127,7 +127,7 @@ export default function HomePage() {
               experience and the latest research.
             </p>
             <div className="text-gray-700 text-base sm:text-lg md:text-xl leading-relaxed">
-              Browse Now <span className="text-blue-500 cursor-pointer">click here</span>
+            <Link to="/medical-care">Browse Now<span className="text-blue-500 cursor-pointer"> click here</span></Link>
             </div>
           </div>
         </div>
