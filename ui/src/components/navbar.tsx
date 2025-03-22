@@ -64,14 +64,17 @@ export function Navbar() {
                 {item.label}
               </Link>
             ))}
-          </nav>
-          <nav>
-            <SignedOut>
-              <SignInButton />
-            </SignedOut>
-            <SignedIn>
-              <UserButton />
-            </SignedIn>
+            <div className='hidden lg:flex items-center'>
+              <SignedOut>
+                <SignInButton />
+              </SignedOut>
+              <SignedIn>
+                <UserButton
+                  afterSignOutUrl="/"
+                  userProfileUrl="/user-profile"
+                />
+              </SignedIn>
+            </div>
           </nav>
         </div>
 
