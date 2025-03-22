@@ -22,25 +22,17 @@ import {
 import { useEffect } from "react";
 import toast from "react-hot-toast";
 
+// Define the structure of user metadata
 interface UserMetadata {
     country: string;
     state: string;
     city: string;
     postalCode: string;
     dateOfBirth: string;
-    [key: string]: string;
+    [key: string]: string; // Allow additional fields
 }
 
-interface FormValues {
-    firstName: string;
-    lastName: string;
-    country: string;
-    state: string;
-    city: string;
-    postalCode: string;
-    dateOfBirth: string;
-}
-
+// Define the form schema using Zod
 const formSchema = z.object({
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
@@ -54,11 +46,12 @@ const formSchema = z.object({
 export default function PersonalInformationPage() {
     const { user } = useUser(); // Fetch user data from Clerk
 
-    const form = useForm<FormValues>({
+    // Initialize the form with default values
+    const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            firstName: user?.firstName || "",
-            lastName: user?.lastName || "",
+            firstName: "",
+            lastName: "",
             country: "",
             state: "",
             city: "",
@@ -67,9 +60,10 @@ export default function PersonalInformationPage() {
         },
     });
 
+    // Populate the form with user data when the component mounts or user changes
     useEffect(() => {
         if (user) {
-            const metadata = user.unsafeMetadata as unknown as UserMetadata; // Fix type conversion
+            const metadata = user.unsafeMetadata as UserMetadata; // Fetch metadata from Clerk
             form.reset({
                 firstName: user.firstName || "",
                 lastName: user.lastName || "",
@@ -82,8 +76,21 @@ export default function PersonalInformationPage() {
         }
     }, [user, form]);
 
-    async function onSubmit(values: FormValues) {
+    // Handle form submission
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (!user) {
+            toast.error("User not found. Please sign in.");
+            return;
+        }
+
         try {
+            // Update user's first and last name
+            await user.update({
+                firstName: values.firstName,
+                lastName: values.lastName,
+            });
+
+            // Update user's metadata
             const metadata: UserMetadata = {
                 country: values.country,
                 state: values.state,
@@ -91,17 +98,14 @@ export default function PersonalInformationPage() {
                 postalCode: values.postalCode,
                 dateOfBirth: values.dateOfBirth,
             };
-
-            await user?.update({
-                firstName: values.firstName,
-                lastName: values.lastName,
+            await user.update({
                 unsafeMetadata: metadata,
             });
 
-            toast.success("Profile updated successfully"); // Use toast for success message
+            toast.success("Profile updated successfully!");
         } catch (error) {
             console.error("Error updating profile:", error);
-            toast.error("Failed to update profile"); // Use toast for error message
+            toast.error("Failed to update profile. Please try again.");
         }
     }
 
@@ -116,6 +120,7 @@ export default function PersonalInformationPage() {
             </div>
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                    {/* First Name */}
                     <FormField
                         control={form.control}
                         name="firstName"
@@ -129,6 +134,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* Last Name */}
                     <FormField
                         control={form.control}
                         name="lastName"
@@ -142,6 +149,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* Country */}
                     <FormField
                         control={form.control}
                         name="country"
@@ -164,6 +173,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* State */}
                     <FormField
                         control={form.control}
                         name="state"
@@ -186,6 +197,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* City */}
                     <FormField
                         control={form.control}
                         name="city"
@@ -199,6 +212,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* Postal Code */}
                     <FormField
                         control={form.control}
                         name="postalCode"
@@ -212,6 +227,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* Date of Birth */}
                     <FormField
                         control={form.control}
                         name="dateOfBirth"
@@ -225,6 +242,8 @@ export default function PersonalInformationPage() {
                             </FormItem>
                         )}
                     />
+
+                    {/* Submit Button */}
                     <Button type="submit">Save</Button>
                 </form>
             </Form>

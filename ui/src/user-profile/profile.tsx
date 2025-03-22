@@ -1,37 +1,22 @@
-import { Link } from 'react-router-dom';
-import { UserCircle, Lock } from 'lucide-react'
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
-
-interface Metadata {
-  title?: string;
-  description?: string;
-  keywords?: string[];
-}
-
-export const metadata: Metadata = {
-  title: "Settings",
-  description: "Account settings and preferences.",
-}
+import { Link, Outlet } from 'react-router-dom';
+import { UserCircle, Lock } from 'lucide-react';
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 const sidebarNavItems = [
   {
     title: "Personal Information",
-    href: "/settings",
+    href: "/user-profile/personal-information",
     icon: UserCircle,
   },
   {
     title: "Password & Security",
-    href: "/settings/security",
+    href: "/user-profile/password-security",
     icon: Lock,
   },
-]
+];
 
-interface SettingsLayoutProps {
-  children: React.ReactNode
-}
-
-export default function SettingsLayout({ children }: SettingsLayoutProps) {
+export default function SettingsLayout() {
   return (
     <div className="container grid flex-1 gap-12 md:grid-cols-[200px_1fr] py-8">
       <aside className="hidden w-[200px] flex-col md:flex">
@@ -52,8 +37,8 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         </nav>
       </aside>
       <main className="flex w-full flex-1 flex-col overflow-hidden">
-        {children}
+        <Outlet />
       </main>
     </div>
-  )
+  );
 }
