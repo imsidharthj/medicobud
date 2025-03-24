@@ -23,7 +23,7 @@ const formSchema = z.object({
   gender: z.string().min(1, { message: 'Gender is required' }),
   weight: z.number().min(0, {
     message: 'Weight must be a positive number.',
-  }),
+  }).default(70),
   forSelf: z.boolean().default(true),
   allergies: z.array(z.string()).optional().default([]),
   symptoms: z.array(z.string()).min(3, {
@@ -46,7 +46,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
       name: '',
       age: '',
       gender: '',
-      weight: 70,
+      weight: undefined,
       forSelf: true,
       allergies: [],
       symptoms: [],
@@ -67,8 +67,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
 
   const totalSteps = steps.length;
 
+  const [completeSteps, steCompleteSteps] = useState<number[]>([]);
+
   const nextStep = () => {
     if (currentStep < totalSteps) {
+      if(!completeSteps.includes(currentStep)){
+        steCompleteSteps([...completeSteps, currentStep]);
+      }
       setCurrentStep(currentStep + 1);
     }
   };
@@ -123,12 +128,13 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
               <form onSubmit={handleSubmit(onSubmit)}>
                 {/* Step 1: Who is the survey for */}
                 {currentStep === 1 && (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
+                    {/* Step 1 – For Self or Someone Else */}
                     <Controller
                       name="forSelf"
                       control={control}
                       render={({ field }) => (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                           <div
                             className={`border rounded-lg p-6 flex flex-col items-center cursor-pointer transition-all hover:border-blue-500 ${field.value ? 'border-blue-500 bg-blue-50' : ''}`}
                             onClick={() => field.onChange(true)}
@@ -150,7 +156,6 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
                                 <path d="M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" strokeWidth="2" />
                                 <path d="M12 14C8.13401 14 5 17.134 5 21H19C19 17.134 15.866 14 12 14Z" stroke="currentColor" strokeWidth="2" />
-                                {/* <path d="M19 8C21.2091 8 23 6.20914 23 4C23 1.79086 21.2091 0 19 0C16.7909 0 15 1.79086 15 4C15 6.20914 16.7909 8 19 8Z" stroke="currentColor" strokeWidth="1.5"/> */}
                               </svg>
                             </div>
                             <p className="text-lg font-medium">Someone else</p>
@@ -158,16 +163,14 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                         </div>
                       )}
                     />
-                  </div>
-                )}
-                {currentStep === 1 && (
-                  <div className="space-y-4">
+
+                    {/* Step 1 – Name Input */}
                     <Controller
                       name="name"
                       control={control}
                       render={({ field }) => (
                         <div className="space-y-2">
-                          <Label htmlFor="name" className='text-gray-400'>Full Name</Label>
+                          <Label htmlFor="name" className="text-gray-400">Full Name</Label>
                           <Input
                             {...field}
                             id="name"
@@ -197,7 +200,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                             {...field}
                             id="age"
                             type="number"
-                            className="h-12 pr-30 text-right text-lg mt-5"
+                            className="h-12 mt-3 max-w-60"
                             placeholder="Enter your age"
                           />
                           <div className="absolute right-3 top-3 text-gray-500">
@@ -269,7 +272,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                             {...field}
                             id="weight"
                             type="number"
-                            className="h-12 mt-3"
+                            className="h-12 mt-3 max-w-60"
                             placeholder="Enter your weight"
                             onChange={(e) => field.onChange(Number(e.target.value))}
                           />
@@ -409,6 +412,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                       type="button"
                       onClick={nextStep}
                       disabled={
+                        (currentStep === 1 && !formData.name) ||
                         (currentStep === 2 && !formData.age) ||
                         (currentStep === 3 && !formData.gender) ||
                         (currentStep === 4 && (!formData.weight || formData.weight < 20 || formData.weight > 150)) ||
@@ -429,11 +433,16 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                 <p className="text-gray-500 mt-5 mb-5">
                   Step {currentStep} of {totalSteps}
                 </p>
+
                 <div className="flex justify-between mb-1">
                   {steps.map((step, index) => (
                     <div
                       key={step.id}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= step.id ? 'bg-blue-500 text-white' : 'bg-white text-blue-400'
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${completeSteps.includes(step.id)
+                          ? 'bg-blue-500 text-white'
+                          : currentStep === step.id
+                            ? 'bg-blue-200 text-blue-800'
+                            : 'bg-white text-blue-400'
                         }`}
                     >
                       {index + 1}
@@ -443,7 +452,7 @@ const MedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit }) => {
                 <div className="relative h-1 bg-white">
                   <div
                     className="absolute h-1 bg-blue-400 transition-all duration-300"
-                    style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+                    style={{ width: `${((completeSteps.length) / (totalSteps - 1)) * 100}%` }}
                   ></div>
                 </div>
                 <div className="flex justify-between mt-1">

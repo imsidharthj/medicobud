@@ -11,4 +11,10 @@ export default defineConfig({
       '@lib': path.resolve(__dirname, './src/lib'), // Alias for @lib/*
     },
   },
+  server: {
+    open: true,
+  },
+  build: {
+    outDir: 'dist',
+  }
 });
