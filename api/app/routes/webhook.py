@@ -19,6 +19,21 @@ router = APIRouter(
     tags=["webhooks"]
 )
 
+REQUIRED_FIELD = [
+    "first_name", "last_name", "email", "date_of_birth", "gender", "weight", "allergies"
+]
+
+def is_field_missing(user_profile):
+    """
+    Check if any of the required fields are missing in the user profile.
+    """
+    missing_fields = []
+
+    for field in REQUIRED_FIELD:
+        if not hasattr(user_profile, field) or getattr(user_profile, field) is None:
+            missing_fields.append(field)
+    return missing_fields
+
 @router.post("/")
 async def clerk_webhook(
     request: Request,
@@ -40,6 +55,9 @@ async def clerk_webhook(
         
         event_data = event["data"]
         event_type = event["type"]
+        user_profile = None
+        created_new_user = False
+        print(f"Received event: {event_type}")
 
         if event_type == "user.created":
             user_id = event_data.get("id")
@@ -68,8 +86,10 @@ async def clerk_webhook(
                     existing_user.last_name = last_name
                     db.commit()
                     print("User is reactivated")
+                    user_profile = existing_user
                 else:
                     print("User is already active")
+                    user_profile = existing_user
             else:
                 new_user = UserProfile(
                     clerk_user_id=user_id,
@@ -81,6 +101,8 @@ async def clerk_webhook(
                 db.commit()
                 db.refresh(new_user)
                 print("User is created")
+                user_profile = new_user
+                created_new_user = True
 
         elif event_type == "user.updated":
             user_id = event_data.get("id")
@@ -114,6 +136,7 @@ async def clerk_webhook(
                 
                 db.commit()
                 print(f"Updated user {user_id}")
+                user_profile = user
     
         elif event_type == "user.deleted":
             user_id = event_data.get("id")
@@ -141,7 +164,93 @@ async def clerk_webhook(
             else:
                 print(f"User {user_id} not found in database.")
 
-        return {"success": True}
+        response_data = {"success": True}
+
+        if user_profile and (created_new_user or event_type == "user.updated"):
+            missing_fields = is_field_missing(user_profile)
+            if missing_fields:
+                user_profile.profile_status = "incomplete"
+                user_profile.missing_fields = missing_fields
+                db.commit()
+                print(f"User {user_profile.clerk_user_id} profile is incomplete. Missing fields: {missing_fields}")
+                response_data.update({
+                    "profile_complete": False,
+                    "missing_fields": missing_fields,
+                    "user_id": user_profile.clerk_user_id
+                })
+            else:
+                user_profile.profile_status = "complete"
+                user_profile.missing_fields = []
+                db.commit()
+                print(f"User {user_profile.clerk_user_id} profile is complete.")
+                response_data.update({
+                    "profile_complete": True,
+                    "missing_fields": [],
+                    "user_id": user_profile.clerk_user_id
+                })
+        return response_data
 
     except WebhookVerificationError as err:
         raise HTTPException(status_code=400, detail={"success": False, "message": str(err)})
+
+@router.get("/profile-status/{user_id}")
+def check_profile_status(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint to check the profile status of a user.
+    """
+    user = db.query(UserProfile).filter(UserProfile.clerk_user_id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check which required fields are missing
+    missing_fields = is_field_missing(user)
+    
+    is_complete = len(missing_fields) == 0
+    
+    # # Update the profile status
+    # user.profile_status = "complete" if is_complete else "incomplete"
+    # user.missing_fields = missing_fields
+    # db.commit()
+    
+    # Return the status to the frontend
+    return {
+        "profile_complete": is_complete,
+        "missing_fields": missing_fields,
+        "user_id": user_id
+    }
+
+@router.post('/complete-profile/{user_id}')
+async def complete_profile(
+    user_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint to complete the user profile.
+    """
+    user = db.query(UserProfile).filter(UserProfile.clerk_user_id == user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile_data = await request.json()
+
+    for field, value in profile_data.items():
+        if hasattr(user, field):
+            setattr(user, field, value)
+    
+    # Update the profile status
+    user.profile_status = "complete" if not is_field_missing(user) else "incomplete"
+    user.missing_fields = check_missing_fields(user)
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "profile_complete": len(user.missing_fields) == 0,
+        "missing_fields": user.missing_fields,
+        "user_id": user_id
+    }
