@@ -23,16 +23,24 @@ REQUIRED_FIELD = [
     "first_name", "last_name", "email", "date_of_birth", "gender", "weight", "allergies"
 ]
 
-def is_field_missing(user_profile):
-    """
-    Check if any of the required fields are missing in the user profile.
-    """
+def check_missing_fields(user_profile):
     missing_fields = []
 
     for field in REQUIRED_FIELD:
         if not hasattr(user_profile, field) or getattr(user_profile, field) is None:
             missing_fields.append(field)
     return missing_fields
+
+def get_verified_email(email_addresses):
+    if not email_addresses:
+        return None
+
+    if email_addresses:
+        for email_entry in email_addresses:
+            verification_status = email_entry.get("verification", {}).get("status")
+            if verification_status == "verified":
+                return email_entry["email_address"]
+    return email_addresses[0].get("email_address") if email_addresses else None
 
 @router.post("/")
 async def clerk_webhook(
@@ -59,21 +67,18 @@ async def clerk_webhook(
         created_new_user = False
         print(f"Received event: {event_type}")
 
+        email = get_verified_email(event_data.get("email_addresses", []))
+
+        if not email:
+            print("No verified email found in event data.")
+            return {"success": False, "message": "No verified email found in event data."}
+
         if event_type == "user.created":
             user_id = event_data.get("id")
             first_name = event_data.get("first_name")
             last_name = event_data.get("last_name")
-            email = None
-            email_addresses = event_data.get("email_addresses")
-            if email_addresses:
-                for email_entry in email_addresses:
-                    verification_status = email_entry.get("verification", {}).get("status")
-                    if verification_status == "verified":
-                        email = email_entry["email_address"]
-                        break
             print(f"new user details {first_name}, {last_name}, {email}")
 
-            # Use filter with or_ instead of filter_by
             existing_user = db.query(UserProfile).filter(
                 or_(UserProfile.clerk_user_id == user_id, UserProfile.email == email)
             ).first()
@@ -84,6 +89,7 @@ async def clerk_webhook(
                     existing_user.is_active = True
                     existing_user.first_name = first_name
                     existing_user.last_name = last_name
+                    existing_user.clerk_user_id = user_id
                     db.commit()
                     print("User is reactivated")
                     user_profile = existing_user
@@ -106,30 +112,12 @@ async def clerk_webhook(
 
         elif event_type == "user.updated":
             user_id = event_data.get("id")
-            # Optionally extract email if needed
-            email = None
-            email_addresses = event_data.get("email_addresses")
-            if email_addresses:
-                for email_entry in email_addresses:
-                    verification_status = email_entry.get("verification", {}).get("status")
-                    if verification_status == "verified":
-                        email = email_entry["email_address"]
-                        break
-
             user = db.query(UserProfile).filter(
                 or_(UserProfile.clerk_user_id == user_id, UserProfile.email == email)
             ).first()
 
-            if user:
-                # Update email from first verified address
-                if email_addresses:
-                    for email_entry in email_addresses:
-                        verification_status = email_entry.get("verification", {}).get("status")
-                        if verification_status == "verified":
-                            user.email = email_entry["email_address"]
-                            break
-                
-                # Update other fields
+            if user:                
+                user.clerk_user_id = user_id
                 user.first_name = event_data.get("first_name", user.first_name)
                 user.last_name = event_data.get("last_name", user.last_name)
                 user.date_of_birth = event_data.get("birthdate", user.date_of_birth)
@@ -141,17 +129,6 @@ async def clerk_webhook(
         elif event_type == "user.deleted":
             user_id = event_data.get("id")
             print(f"Deleting user {user_id}")
-            print(f'full event data: {event_data}')
-            # Optionally extract email if needed
-            email = None
-            email_addresses = event_data.get("email_addresses")
-            if email_addresses:
-                for email_entry in email_addresses:
-                    verification_status = email_entry.get("verification", {}).get("status")
-                    if verification_status == "verified":
-                        email = email_entry["email_address"]
-                        break
-
             user = db.query(UserProfile).filter(
                 or_(UserProfile.clerk_user_id == user_id, UserProfile.email == email)
             ).first()
@@ -167,90 +144,23 @@ async def clerk_webhook(
         response_data = {"success": True}
 
         if user_profile and (created_new_user or event_type == "user.updated"):
-            missing_fields = is_field_missing(user_profile)
-            if missing_fields:
-                user_profile.profile_status = "incomplete"
-                user_profile.missing_fields = missing_fields
-                db.commit()
-                print(f"User {user_profile.clerk_user_id} profile is incomplete. Missing fields: {missing_fields}")
-                response_data.update({
-                    "profile_complete": False,
-                    "missing_fields": missing_fields,
-                    "user_id": user_profile.clerk_user_id
-                })
-            else:
-                user_profile.profile_status = "complete"
-                user_profile.missing_fields = []
-                db.commit()
-                print(f"User {user_profile.clerk_user_id} profile is complete.")
-                response_data.update({
-                    "profile_complete": True,
-                    "missing_fields": [],
-                    "user_id": user_profile.clerk_user_id
-                })
+            missing_fields = check_missing_fields(user_profile)
+            is_complete = len(missing_fields) == 0
+
+            response_data.update({
+                "profile_complete": is_complete,
+                "missing_fields": missing_fields,
+                "email": email,
+            })
+            
+            print(f"User {user_profile.clerk_user_id} profile status: {'complete' if is_complete else 'incomplete'}")
+            if not is_complete:
+                print(f"Missing fields: {missing_fields}")
+
         return response_data
 
     except WebhookVerificationError as err:
         raise HTTPException(status_code=400, detail={"success": False, "message": str(err)})
-
-@router.get("/profile-status/{user_id}")
-def check_profile_status(
-    user_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Endpoint to check the profile status of a user.
-    """
-    user = db.query(UserProfile).filter(UserProfile.clerk_user_id == user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check which required fields are missing
-    missing_fields = is_field_missing(user)
-    
-    is_complete = len(missing_fields) == 0
-    
-    # # Update the profile status
-    # user.profile_status = "complete" if is_complete else "incomplete"
-    # user.missing_fields = missing_fields
-    # db.commit()
-    
-    # Return the status to the frontend
-    return {
-        "profile_complete": is_complete,
-        "missing_fields": missing_fields,
-        "user_id": user_id
-    }
-
-@router.post('/complete-profile/{user_id}')
-async def complete_profile(
-    user_id: str,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Endpoint to complete the user profile.
-    """
-    user = db.query(UserProfile).filter(UserProfile.clerk_user_id == user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    profile_data = await request.json()
-
-    for field, value in profile_data.items():
-        if hasattr(user, field):
-            setattr(user, field, value)
-    
-    # Update the profile status
-    user.profile_status = "complete" if not is_field_missing(user) else "incomplete"
-    user.missing_fields = check_missing_fields(user)
-    db.commit()
-    db.refresh(user)
-    
-    return {
-        "profile_complete": len(user.missing_fields) == 0,
-        "missing_fields": user.missing_fields,
-        "user_id": user_id
-    }
+    except Exception as e:
+        print(f"Unexpected webhook error: {str(e)}")
+        raise HTTPException(status_code=500, detail={"success": False, "message": "Internal server error"})
