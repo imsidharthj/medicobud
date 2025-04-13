@@ -1,10 +1,35 @@
-from fastapi import FastAPI, HTTPException
-# from .models import PatientData, MatchedDiseasesResponse
-from .utils import load_disease_data, match_symptoms
-# from .services import diagnose_symptoms
-from typing import List
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Depends, Query, APIRouter, Request, status, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy.orm import Session
+from fuzzywuzzy import fuzz
+from typing import List
+from dotenv import load_dotenv
+import requests
+from pydantic import ValidationError, BaseModel
+import hmac
+import hashlib
+import json
+import os
+from typing import Literal, Optional, List
+from .db import engine, Base, get_db
+from .models import UserDiagnosis, UserProfile
+from .schemas import  PatientData, MatchedDiseasesResponse, UserProfileBase, UserProfileCreate, UserProfileResponse, UserProfileUpdate, DiagnosisHistoryResponse
+from .utils import load_disease_data, match_symptoms, unique_symptoms
+from .services import diagnose_symptoms
+from dotenv import load_dotenv
+from svix.webhooks import Webhook, WebhookVerificationError
+from .routes.jwt import verify_clerk_jwt, get_current_user_optional, get_current_user
+from .routes.webhook import router as webhook_router
+from .routes.auth import router as auth_router
+from .api_methods.diagnosis import router as diagnosis_router
+from .api_methods.profile import router as profile_router
+
+load_dotenv()
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -16,39 +41,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load disease data at startup
 diseases_dict = load_disease_data("dataset.csv")
+
+app.include_router(webhook_router)
+app.include_router(auth_router)
+app.include_router(diagnosis_router)
+app.include_router(profile_router)
+
 
 @app.get("/")
 def root():
-    return {"message": "This the testing of Diagnosis API."}
-
-class PatientData(BaseModel):
-    name: str
-    age: int
-    symptoms: List[str]
-
-class MatchedDiseasesResponse(BaseModel):
-    name: str
-    age: int
-    symptoms: List[str]
-    matched_diseases: List[str]
-
-def diagnose_symptoms(symptoms, diseases_dict):
-    return match_symptoms(diseases_dict, symptoms)
-
-@app.post("/diagnosis", response_model=MatchedDiseasesResponse)
-def diagnose_patient(data: PatientData):
-    if len(data.symptoms) < 3:
-        raise HTTPException(status_code=400, detail="Please provide at least three symptoms.")
-
-    matched_diseases = diagnose_symptoms(data.symptoms, diseases_dict)
-    if not matched_diseases:
-        raise HTTPException(status_code=404, detail="No diseases matched the entered symptoms.")
-
-    return {
-        "name": data.name,
-        "age": data.age,
-        "symptoms": data.symptoms,
-        "matched_diseases": matched_diseases,
-    }
+    return {"message": "This is the Diagnosis API."}

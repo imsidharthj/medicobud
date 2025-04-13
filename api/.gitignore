@@ -1,2 +1,7 @@
 fast/
 medicomate
+**/__pycache__/
+app/__pycache__/
+app/__pycache__/__init__.cpython-312.pyc
+app/__pycache__/main.cpython-312.pyc
+app/__pycache__/__init__.cpython-312.pyc
