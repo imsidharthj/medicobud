@@ -1,14 +1,11 @@
 fast/
 medicomate
-<<<<<<< Updated upstream
 **/__pycache__/
 app/__pycache__/
 app/__pycache__/__init__.cpython-312.pyc
 app/__pycache__/main.cpython-312.pyc
 app/__pycache__/__init__.cpython-312.pyc
-=======
 
 # Ignore compiled Python files
 __pycache__/
 *.pyc
->>>>>>> Stashed changes
