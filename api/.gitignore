@@ -9,3 +9,4 @@ app/__pycache__/__init__.cpython-312.pyc
 # Ignore compiled Python files
 __pycache__/
 *.pyc
+api/
