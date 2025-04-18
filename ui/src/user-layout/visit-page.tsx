@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Upload, FileText, Calendar } from 'lucide-react';
-import NewMedicalForm from '@/form/diagnosis-form';
+import { Plus, FileText, Calendar } from 'lucide-react';
 
 interface Session {
   id: string;
@@ -23,15 +22,29 @@ interface Report {
   type: string;
 }
 
-interface DoctorViewProps {
+interface VisitPageProps {
   doctor: {
     id: string;
     name: string;
     specialty?: string;
   };
+  SessionFormComponent?: React.ComponentType<any>;
+  ReportFormComponent?: React.ComponentType<any>;
+  sessionFormProps?: any;
+  reportFormProps?: any;
 }
 
-export default function DoctorView({ doctor }: DoctorViewProps) {
+export default function VisitPage({
+  doctor,
+  SessionFormComponent,
+  ReportFormComponent,
+  sessionFormProps = {},
+  reportFormProps = {}
+}: VisitPageProps) {
+  const doctors = [doctor]
+  const [showNewSessionForm, setShowNewSessionForm] = useState(false);
+  const [showNewReportForm, setShowNewReportForm] = useState(false);
+  
   const [sessions, setSessions] = useState<Session[]>([
     {
       id: '1',
@@ -70,8 +83,21 @@ export default function DoctorView({ doctor }: DoctorViewProps) {
     },
   ]);
 
-  const [showNewSymptomForm, setShowNewSymptomForm] = useState(false);
-  const [showNewReportForm, setShowNewReportForm] = useState(false);
+  const handleAddSession = () => {
+    setShowNewSessionForm(true);
+  };
+
+  const handleAddReport = () => {
+    setShowNewReportForm(true);
+  };
+
+  const handleCloseSessionForm = () => {
+    setShowNewSessionForm(false);
+  };
+
+  const handleCloseReportForm = () => {
+    setShowNewReportForm(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -81,7 +107,7 @@ export default function DoctorView({ doctor }: DoctorViewProps) {
           {doctor.specialty && <p className="text-gray-500">{doctor.specialty}</p>}
         </div>
         <Button 
-          onClick={() => setShowNewSymptomForm(true)}
+          onClick={handleAddSession}
           className="flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
@@ -102,40 +128,28 @@ export default function DoctorView({ doctor }: DoctorViewProps) {
         </TabsList>
         
         <TabsContent value="sessions" className="space-y-4 mt-4">
-          {showNewSymptomForm ? (
+          {showNewSessionForm ? (
             <Card>
               <CardHeader>
                 <CardTitle>Add New Symptom Session</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Date</label>
-                    <input type="date" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                {SessionFormComponent ? (
+                  <SessionFormComponent 
+                    onClose={handleCloseSessionForm}
+                    onSubmit={(sessionData: any) => {
+                      setSessions([...sessions, sessionData]);
+                      setShowNewSessionForm(false);
+                    }}
+                    {...sessionFormProps}
+                    doctorId={doctor.id}
+                  />
+                ) : (
+                  <div className="text-center py-4">
+                    <p>Session form component not provided</p>
+                    <Button onClick={handleCloseSessionForm} className="mt-2">Close</Button>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Symptoms</label>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <input type="text" placeholder="Enter symptom" className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
-                        <Button type="button" variant="outline" size="sm" className="flex items-center gap-1">
-                          <Upload className="h-4 w-4" />
-                          Upload
-                        </Button>
-                      </div>
-                      <Button type="button" variant="outline" size="sm" className="flex items-center gap-1 w-full">
-                        <Plus className="h-4 w-4" />
-                        Add Another Symptom
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button type="submit" className="flex-1">Save Session</Button>
-                    <Button type="button" variant="outline" onClick={() => setShowNewSymptomForm(false)}>Cancel</Button>
-                  </div>
-                </form>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -191,39 +205,24 @@ export default function DoctorView({ doctor }: DoctorViewProps) {
                 <CardTitle>Add Lab Report</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Report Name</label>
-                    <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                {ReportFormComponent ? (
+                  <ReportFormComponent 
+                    onClose={handleCloseReportForm}
+                    onSubmit={(reportData: any) => {
+                      setReports([...reports, reportData]);
+                      setShowNewReportForm(false);
+                    }}
+                    {...reportFormProps}
+                    doctorId={doctor.id}
+                    doctors={doctors}
+                    handleSubmit={reportFormProps}
+                  />
+                ) : (
+                  <div className="text-center py-4">
+                    <p>Report form component not provided</p>
+                    <Button onClick={handleCloseReportForm} className="mt-2">Close</Button>
                   </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Date</label>
-                    <input type="date" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Upload Report</label>
-                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                      <div className="space-y-1 text-center">
-                        <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                        <div className="flex text-sm text-gray-600">
-                          <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
-                            <span>Upload a file</span>
-                            <input type="file" className="sr-only" />
-                          </label>
-                          <p className="pl-1">or drag and drop</p>
-                        </div>
-                        <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button type="submit" className="flex-1">Save Report</Button>
-                    <Button type="button" variant="outline" onClick={() => setShowNewReportForm(false)}>Cancel</Button>
-                  </div>
-                </form>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -231,7 +230,7 @@ export default function DoctorView({ doctor }: DoctorViewProps) {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">Lab Reports</h3>
                 <Button 
-                  onClick={() => setShowNewReportForm(true)}
+                  onClick={handleAddReport}
                   className="flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
