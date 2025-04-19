@@ -106,13 +106,6 @@ export default function VisitPage({
           <h1 className="text-2xl font-bold">{doctor.name}</h1>
           {doctor.specialty && <p className="text-gray-500">{doctor.specialty}</p>}
         </div>
-        <Button 
-          onClick={handleAddSession}
-          className="flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          New Session
-        </Button>
       </div>
 
       <Tabs defaultValue="sessions">
@@ -154,46 +147,59 @@ export default function VisitPage({
             </Card>
           ) : (
             <>
-              {sessions.map((session) => (
-                <Card key={session.id}>
-                  <CardHeader>
-                    <CardTitle>Session: {new Date(session.date).toLocaleDateString()}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-medium">Symptoms:</h3>
-                        <ul className="list-disc list-inside">
-                          {session.symptoms.map((symptom, index) => (
-                            <li key={index} className="flex items-center gap-2">
-                              {symptom.name}
-                              {symptom.imageUrl && (
-                                <Button variant="ghost" size="sm" className="text-blue-500 p-0 h-auto">
-                                  View Image
-                                </Button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Add Session</h3>
+                <Button 
+                  onClick={handleAddSession}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add session
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sessions.map((session) => (
+                  <Card key={session.id}>
+                    <CardHeader>
+                      <CardTitle>Session: {new Date(session.date).toLocaleDateString()}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-medium">Symptoms:</h3>
+                          <ul className="list-disc list-inside">
+                            {session.symptoms.map((symptom, index) => (
+                              <li key={index} className="flex items-center gap-2">
+                                {symptom.name}
+                                {symptom.imageUrl && (
+                                  <Button variant="ghost" size="sm" className="text-blue-500 p-0 h-auto">
+                                    View Image
+                                  </Button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        
+                        {session.diagnosis && (
+                          <div>
+                            <h3 className="font-medium">Diagnosis:</h3>
+                            <p>{session.diagnosis}</p>
+                          </div>
+                        )}
+                        
+                        {session.notes && (
+                          <div>
+                            <h3 className="font-medium">Notes:</h3>
+                            <p>{session.notes}</p>
+                          </div>
+                        )}
                       </div>
-                      
-                      {session.diagnosis && (
-                        <div>
-                          <h3 className="font-medium">Diagnosis:</h3>
-                          <p>{session.diagnosis}</p>
-                        </div>
-                      )}
-                      
-                      {session.notes && (
-                        <div>
-                          <h3 className="font-medium">Notes:</h3>
-                          <p>{session.notes}</p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </>
           )}
         </TabsContent>
