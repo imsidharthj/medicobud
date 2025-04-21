@@ -222,7 +222,7 @@ export default function LaboratoryReportForm({
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
-                            variant={"outline"}
+                            variant={"blueButton"}
                             className={cn(
                               "pl-3 text-left font-normal border-blue-200 focus:border-blue-500",
                               !field.value && "text-muted-foreground"
