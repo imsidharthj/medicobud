@@ -6,21 +6,21 @@ from datetime import date
 from ..db import get_db
 from ..models import DoctorVisit, UserProfile
 from ..schemas import DoctorVisitCreate, DoctorVisitResponse, DoctorVisitUpdate
-from ..routes.jwt import get_current_user
 
 router = APIRouter(
     prefix="/visits",
     tags=["visits"],
 )
 
+app = FastAPI()
+
 @router.post("/", response_model=DoctorVisitResponse, status_code=status.HTTP_201_CREATED)
 def create_visit(
     visit: DoctorVisitCreate,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     user_profile = db.query(UserProfile).filter(
-        UserProfile.clerk_user_id == current_user["sub"]
+        UserProfile.email == visit.email
     ).first()
     
     if not user_profile:
@@ -30,8 +30,8 @@ def create_visit(
         )
     
     db_visit = DoctorVisit(
-        user_id=current_user["sub"],
-        email=user_profile.email,
+        user_id=visit.clerk_user_id,
+        email=visit.email,
         visit_date=visit.visit_date,
         doctor_name=visit.doctor_name,
         facility_name=visit.facility_name,
@@ -46,14 +46,25 @@ def create_visit(
 
 @router.get("/", response_model=List[DoctorVisitResponse])
 def get_visits(
+    clerk_user_id: str,
+    email: str,
     skip: int = 0,
     limit: int = 100,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    query = db.query(DoctorVisit).filter(DoctorVisit.user_id == current_user["sub"])
+    user_profile = db.query(UserProfile).filter(
+        UserProfile.email == email
+    ).first()
+    
+    if not user_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    
+    query = db.query(DoctorVisit).filter(DoctorVisit.user_id == clerk_user_id)
     
     if start_date:
         query = query.filter(DoctorVisit.visit_date >= start_date)
@@ -68,12 +79,23 @@ def get_visits(
 @router.get("/{visit_id}", response_model=DoctorVisitResponse)
 def get_visit(
     visit_id: int,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    clerk_user_id: str,
+    email: str,
+    db: Session = Depends(get_db)
 ):
+    user_profile = db.query(UserProfile).filter(
+        UserProfile.email == email
+    ).first()
+    
+    if not user_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    
     visit = db.query(DoctorVisit).filter(
         DoctorVisit.id == visit_id,
-        DoctorVisit.user_id == current_user["sub"]
+        DoctorVisit.user_id == clerk_user_id
     ).first()
     
     if not visit:
@@ -87,13 +109,23 @@ def get_visit(
 @router.put("/{visit_id}", response_model=DoctorVisitResponse)
 def update_visit(
     visit_id: int,
+    clerk_user_id: str,
     visit_update: DoctorVisitUpdate,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
+    user_profile = db.query(UserProfile).filter(
+        UserProfile.email == visit_update.email
+    ).first()
+    
+    if not user_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    
     db_visit = db.query(DoctorVisit).filter(
         DoctorVisit.id == visit_id,
-        DoctorVisit.user_id == current_user["sub"]
+        DoctorVisit.user_id == clerk_user_id
     ).first()
     
     if not db_visit:
@@ -102,7 +134,7 @@ def update_visit(
             detail="Doctor visit not found"
         )
     
-    update_data = visit_update.model_dump(exclude_unset=True)
+    update_data = visit_update.model_dump(exclude_unset=True, exclude={"email", "clerk_user_id"})
     for field, value in update_data.items():
         setattr(db_visit, field, value)
     
@@ -114,12 +146,23 @@ def update_visit(
 @router.delete("/{visit_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_visit(
     visit_id: int,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    clerk_user_id: str,
+    email: str,
+    db: Session = Depends(get_db)
 ):
+    user_profile = db.query(UserProfile).filter(
+        UserProfile.email == email
+    ).first()
+    
+    if not user_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User profile not found"
+        )
+    
     db_visit = db.query(DoctorVisit).filter(
         DoctorVisit.id == visit_id,
-        DoctorVisit.user_id == current_user["sub"]
+        DoctorVisit.user_id == clerk_user_id
     ).first()
     
     if not db_visit:
