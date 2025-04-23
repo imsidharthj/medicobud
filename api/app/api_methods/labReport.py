@@ -16,6 +16,8 @@ router = APIRouter(
     tags=["lab-reports"],
 )
 
+app = FastAPI()
+
 async def save_upload_file(upload_file: UploadFile) -> str:
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
@@ -39,13 +41,9 @@ async def create_lab_report(
     report_date: date = Form(...),
     notes: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    visit = db.query(DoctorVisit).filter(
-        DoctorVisit.id == visit_id,
-        DoctorVisit.user_id == current_user["sub"]
-    ).first()
+    visit = db.query(DoctorVisit).filter(DoctorVisit.id == visit_id).first()
     
     if not visit:
         raise HTTPException(
