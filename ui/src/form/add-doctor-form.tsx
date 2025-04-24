@@ -24,7 +24,11 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function AddDoctorForm() {
+interface AddDoctorFormProps {
+  handleSubmit: (data: FormValues) => Promise<void>;
+}
+
+export function AddDoctorForm({ handleSubmit }: AddDoctorFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const form = useForm<FormValues>({
@@ -40,11 +44,7 @@ export function AddDoctorForm() {
   async function onSubmit(data: FormValues) {
     setIsSubmitting(true);
     try {
-      // Here you would typically send the data to your backend
-      console.log(data);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await handleSubmit(data);
       
       toast.success("Doctor added successfully", {
         description: `${data.name} has been added to your doctors list.`
