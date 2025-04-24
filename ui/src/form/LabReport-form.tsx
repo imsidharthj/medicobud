@@ -69,8 +69,8 @@ export default function LaboratoryReportForm({
 }: LabReportFormProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isManualEntry, setIsManualEntry] = useState(false);
 
-  // Initialize the form
   const form = useForm<LabReportFormValues>({
     resolver: zodResolver(labReportSchema),
     defaultValues: {
@@ -82,7 +82,6 @@ export default function LaboratoryReportForm({
     },
   });
 
-  // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) {
@@ -91,7 +90,6 @@ export default function LaboratoryReportForm({
     }
 
     const file = files[0];
-    // Validate file type
     const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
     if (!allowedTypes.includes(file.type)) {
       setFileError("File must be PDF, JPEG, or PNG");
@@ -99,7 +97,6 @@ export default function LaboratoryReportForm({
       return;
     }
 
-    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       setFileError("File size must be less than 10MB");
       setSelectedFile(null);
@@ -110,14 +107,12 @@ export default function LaboratoryReportForm({
     setSelectedFile(file);
   };
 
-  // Handle form submission
   const onSubmit = (values: LabReportFormValues) => {
     if (!selectedFile) {
       setFileError("Please upload a file");
       return;
     }
     
-    // Call the handleSubmit function from props with form values and file
     handleSubmit({
       ...values,
       file: selectedFile,
@@ -190,23 +185,45 @@ export default function LaboratoryReportForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Doctor</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="border-blue-200 focus:border-blue-500">
-                          <SelectValue placeholder="Select doctor" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {doctors.map((doctor) => (
-                          <SelectItem key={doctor.id} value={doctor.id}>
-                            {doctor.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2">
+                      <Select 
+                        onValueChange={(value) => {
+                          if (value === "manual_entry") {
+                            field.onChange("");
+                            setIsManualEntry(true);
+                          } else {
+                            field.onChange(value);
+                            setIsManualEntry(false);
+                          }
+                        }} 
+                        defaultValue={field.value || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="border-blue-200 focus:border-blue-500">
+                            <SelectValue placeholder="Select doctor" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {doctors.map((doctor) => (
+                            <SelectItem key={doctor.id} value={doctor.id}>
+                              {doctor.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="manual_entry">Enter name manually</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {isManualEntry && (
+                        <FormControl>
+                          <Input
+                            placeholder="Enter doctor's name"
+                            className="mt-2 border-blue-200 focus:border-blue-500"
+                            onChange={(e) => field.onChange(e.target.value)}
+                            value={typeof field.value === 'string' ? field.value : ''}
+                          />
+                        </FormControl>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
