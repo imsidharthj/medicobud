@@ -1,5 +1,5 @@
 # api_methods/lab_reports.py
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, FastAPI
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -75,12 +75,8 @@ def get_lab_reports(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
 ):
-    visit = db.query(DoctorVisit).filter(
-        DoctorVisit.id == visit_id,
-        DoctorVisit.user_id == current_user["sub"]
-    ).first()
+    visit = db.query(DoctorVisit).filter( DoctorVisit.id == visit_id ).first()
     
     if not visit:
         raise HTTPException(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, FastAPI
 from sqlalchemy.orm import Session
 from typing import List
 import json
@@ -36,9 +36,9 @@ def diagnose_patient(visit_id: int, session: SymptomSessionCreate, db: Session =
     db_session = SymptomSession(
         visit_id=visit_id,
         session_date=session.session_date,
-        symptoms=json.dumps(session.symptoms),
+        symptoms=session.symptoms,
         symptom_image_url=session.symptom_image_url,
-        diagnosis=json.dumps(matched_diseases),
+        diagnosis=matched_diseases,
         notes=session.notes
     )
 
