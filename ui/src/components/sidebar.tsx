@@ -9,12 +9,10 @@ import { useEffect, useState } from "react";
 import type React from "react";
 import { useUser } from "@clerk/clerk-react";
 
-
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   onLibraryClick: () => void;
   onPersonalInfoClick: () => void;
-  onDiagnosisFormClick: () => void;
-  activeView: 'form' | 'doctor' | 'personal';
+  activeView: 'doctor' | 'personal';
 }
 
 interface UserProfile {
@@ -24,17 +22,9 @@ interface UserProfile {
   date_of_birth?: string;
 }
 
-interface UserDiagnosis {
-  id?: number;
-  symptoms: string[];
-  predicted_disease: string[];
-  timestamp?: string;
-}
-
 export function Sidebar({ className, onLibraryClick, onPersonalInfoClick, activeView }: SidebarProps) {
   const { user, isLoaded } = useUser();
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
-  const [diagnosisHistoryData, setDiagnosisHistoryData] = useState<UserDiagnosis[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -55,21 +45,12 @@ export function Sidebar({ className, onLibraryClick, onPersonalInfoClick, active
       try {
         setLoading(true);
         
-        // Fetch profile data
         const profileRes = await fetch(
           `http://localhost:8000/api/profile/?email=${encodeURIComponent(email)}`
         );
         if (!profileRes.ok) throw new Error("Failed to fetch profile");
         const profileData_ = await profileRes.json();
         setProfileData(profileData_);
-
-        // Fetch diagnosis history
-        const historyRes = await fetch(
-          `http://localhost:8000/api/diagnosis/history?email=${encodeURIComponent(email)}`
-        );
-        if (!historyRes.ok) throw new Error("Failed to fetch history");
-        const historyData = await historyRes.json();
-        setDiagnosisHistoryData(historyData);
 
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -124,7 +105,7 @@ export function Sidebar({ className, onLibraryClick, onPersonalInfoClick, active
                 </SidebarHeader>
                 <SidebarContent>
                   <Button
-                    variant={activeView === 'form' ? "blueButton" : "ghost"}
+                    variant={activeView === 'personal' ? "blueButton" : "ghost"}
                     className="w-full justify-start gap-2 mb-2"
                     onClick={onPersonalInfoClick}
                   >
@@ -138,19 +119,8 @@ export function Sidebar({ className, onLibraryClick, onPersonalInfoClick, active
                     onClick={onLibraryClick}
                   >
                     <History className="h-4 w-4" />
-                    Library ({diagnosisHistoryData?.length || 0})
+                    Library 
                   </Button>
-                  
-                  <div className="px-4 space-y-2">
-                    {diagnosisHistoryData.slice(0, 3).map((diagnosis) => (
-                      <div key={diagnosis.id} className="text-sm p-2 bg-gray-100 rounded">
-                        <p className="font-medium">{diagnosis.predicted_disease.join(", ") || 'No diagnosis'}</p>
-                        <p className="text-xs text-gray-500">
-                          {diagnosis.timestamp ? new Date(diagnosis.timestamp).toLocaleDateString() : 'No date available'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
                 </SidebarContent>
               </div>
             </ScrollArea>
