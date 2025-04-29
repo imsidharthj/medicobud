@@ -8,7 +8,7 @@ import {
   ListItemText,
   Divider,
   CircularProgress
-} from '@mui/material'; // Assuming you're using Material UI
+} from '@mui/material';
 
 interface SymptomSessionData {
   session_date: string;
@@ -16,7 +16,6 @@ interface SymptomSessionData {
   diagnosis: string | string[];
   notes?: string;
   symptom_image_url?: string;
-  // other fields as needed
 }
 
 interface SymptomSessionModalProps {
@@ -24,12 +23,12 @@ interface SymptomSessionModalProps {
   onClose: () => void;
   sessionData: SymptomSessionData | null;
   loading: boolean;
+  error?: string;
 }
 
 const SymptomSessionModal: React.FC<SymptomSessionModalProps> = ({ open, onClose, sessionData, loading }) => {
   if (!sessionData && !loading) return null;
   
-  // Create a safe local copy with default values
   const safeData = sessionData || {
     session_date: '',
     symptoms: [],
