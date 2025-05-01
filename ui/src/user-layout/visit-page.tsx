@@ -47,6 +47,7 @@ interface VisitPageProps {
   labReports?: Report[];
   selectedReport?: Report | null;
   setSelectedReport?: (report: Report | null) => void;
+  sessionsRefreshTrigger?: number;
 }
 
 export default function VisitPage({
@@ -64,6 +65,7 @@ export default function VisitPage({
   labReports,
   selectedReport,
   setSelectedReport,
+  sessionsRefreshTrigger = 0,
 }: VisitPageProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -102,7 +104,7 @@ export default function VisitPage({
           setLoading(prev => ({...prev, sessions: false}));
         });
     }
-  }, [fetchSymptomSessions, visitId]);
+  }, [fetchSymptomSessions, visitId, sessionsRefreshTrigger]);
   
   useEffect(() => {
     if (fetchLabReports && !labReports) {
@@ -215,7 +217,9 @@ export default function VisitPage({
                   <SessionFormComponent 
                     onClose={handleCloseSessionForm}
                     onSubmit={(sessionData: any) => {
-                      setSessions([...sessions, sessionData]);
+                      if (sessionFormProps.handleFormSubmit) {
+                        sessionFormProps.handleFormSubmit(sessionData);
+                      }
                       setShowNewSessionForm(false);
                     }}
                     {...sessionFormProps}
