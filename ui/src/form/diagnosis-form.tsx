@@ -116,7 +116,9 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
       reader.onload = (e) => {
         if (e.target?.result) {
           const imageData = e.target.result as string;
+          
           const existingImageIndex = symptomImages.findIndex(img => img.symptomName === symptomName);
+          
           if (existingImageIndex >= 0) {
             const updatedImages = [...symptomImages];
             updatedImages[existingImageIndex] = { symptomName, imageData };
@@ -390,9 +392,10 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
                       Next
                     </Button>
                   ) : (
-                    <Button type="submit" variant="blueButton">
-                      Submit
-                    </Button>
+                    // <Button type="submit" variant="blueButton">
+                    //   Submit
+                    // </Button>
+                    <div onClick={() => handleSubmit(onSubmit)()} className='cursor-pointer'>Submit</div>
                   )}
                 </div>
               </form>
