@@ -1,4 +1,3 @@
-# schemas.py
 from datetime import date, datetime
 from typing import List, Optional, Literal
 from pydantic import BaseModel, EmailStr, ConfigDict, validator
@@ -34,27 +33,83 @@ class UserProfileResponse(UserProfileBase):
         from_attributes=True,
     )
 
-class PatientData(BaseModel):
-    symptoms: List[str]
-    user_id: Optional[str] = None
+class DoctorVisitBase(BaseModel):
+    visit_date: date
+    doctor_name: Optional[str] = None
+    facility_name: Optional[str] = None
+    notes: Optional[str] = None
+
+class DoctorVisitCreate(DoctorVisitBase):
+    clerk_user_id: str
     email: EmailStr
 
-class MatchedDiseasesResponse(BaseModel):
-    symptoms: List[str]
-    matched_diseases: List[str]
-    timestamp: datetime
+class DoctorVisitUpdate(BaseModel):
+    clerk_user_id: str
+    email: EmailStr
+    visit_date: Optional[date] = None
+    doctor_name: Optional[str] = None
+    facility_name: Optional[str] = None
+    notes: Optional[str] = None
 
-class DiagnosisHistoryResponse(BaseModel):
+class DoctorVisitResponse(DoctorVisitBase):
     id: int
-    symptoms: List[str]
-    predicted_disease: List[str]
-    timestamp: datetime
+    user_id: str
+    email: str
+    created_at: datetime
+    updated_at: datetime
 
-    @validator('symptoms', 'predicted_disease', pre=True)
-    def parse_json(cls, v):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+class SymptomSessionBase(BaseModel):
+    session_date: datetime
+    symptoms: List[str]
+    symptom_image_url: Optional[str] = None
+    notes: Optional[str] = None
+
+class SymptomSessionCreate(SymptomSessionBase):
+    pass
+
+class SymptomSessionResponse(SymptomSessionBase):
+    id: int
+    visit_id: int
+    diagnosis: List[str]
+    created_at: datetime
+
+    @validator('symptoms', 'diagnosis', pre=True)
+    def parse_json_fields(cls, v):
         if isinstance(v, str):
             return json.loads(v)
         return v
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+class LabReportBase(BaseModel):
+    report_name: str
+    report_type: str
+    doctor_name: Optional[str] = None
+    report_date: date
+    notes: Optional[str] = None
+    file_url: str
+
+class LabReportCreate(LabReportBase):
+    pass
+
+class LabReportUpdate(BaseModel):
+    report_name: Optional[str] = None
+    report_type: Optional[str] = None
+    doctor_name: Optional[str] = None
+    report_date: Optional[date] = None
+    notes: Optional[str] = None
+    file_url: Optional[str] = None
+
+class LabReportResponse(LabReportBase):
+    id: int
+    visit_id: int
+    created_at: datetime
 
     model_config = ConfigDict(
         from_attributes=True,
