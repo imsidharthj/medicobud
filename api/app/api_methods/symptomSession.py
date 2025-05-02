@@ -31,7 +31,7 @@ def diagnose_patient(visit_id: int, session: SymptomSessionCreate, db: Session =
 
     matched_diseases = diagnose_symptoms(session.symptoms, diseases_dict)
     if not matched_diseases:
-        raise HTTPException(status_code=404, detail="No diseases matched the entered symptoms.")
+        matched_diseases = ["No diseases found matched with your symptoms, try again"]
 
     db_session = SymptomSession(
         visit_id=visit_id,
