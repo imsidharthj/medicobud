@@ -9,9 +9,7 @@ import { Thermometer, FileText, Calendar, Image } from 'lucide-react';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-// import { Calendar } from '@/components/ui/calendar';
 
-// Simplified schema that only requires symptoms
 const formSchema = z.object({
   symptoms: z.array(z.string()).min(3, {
     message: 'At least three symptoms are required.',
@@ -41,9 +39,10 @@ interface MedicalFormProps {
     weight: number;
     allergies: string[];
   } | null;
+  onClose?: () => void;
 }
 
-const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProfile }) => {
+const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProfile, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   
 
@@ -95,19 +94,19 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
 
   const onSubmit = (data: FormValues) => {
     console.log('Form submitted:', data);
-    // Combine symptoms with user profile data
     const fullData = {
       ...data,
       ...(userProfile || {})
     };
     handleFormSubmit(fullData);
+    if (onClose) {
+      onClose();
+    }
   };
 
   const removeSymptom = (symptom: string) => {
     setSelectedSymptoms(selectedSymptoms.filter(s => s !== symptom));
   };
-
-  // Add these functions within your component
 
   const handleImageUpload = (symptomName: string, event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -118,16 +117,13 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
         if (e.target?.result) {
           const imageData = e.target.result as string;
           
-          // Check if this symptom already has an image
           const existingImageIndex = symptomImages.findIndex(img => img.symptomName === symptomName);
           
           if (existingImageIndex >= 0) {
-            // Update existing image
             const updatedImages = [...symptomImages];
             updatedImages[existingImageIndex] = { symptomName, imageData };
             setSymptomImages(updatedImages);
           } else {
-            // Add new image
             setSymptomImages([...symptomImages, { symptomName, imageData }]);
           }
         }
@@ -396,9 +392,10 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
                       Next
                     </Button>
                   ) : (
-                    <Button type="submit" variant="blueButton">
-                      Submit
-                    </Button>
+                    // <Button type="submit" variant="blueButton">
+                    //   Submit
+                    // </Button>
+                    <div onClick={() => handleSubmit(onSubmit)()} className='cursor-pointer'>Submit</div>
                   )}
                 </div>
               </form>
