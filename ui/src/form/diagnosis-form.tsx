@@ -11,23 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const formSchema = z.object({
-  symptoms: z.array(z.string()).min(3, {
-    message: 'At least three symptoms are required.',
-  }),
+  symptoms: z.array(z.string()),
   date: z.string().optional(),
-  symptomImages: z.array(
-    z.object({
-      symptomName: z.string(),
-      imageData: z.string(),
-    })
-  ).optional(),
+  notes: z.string().optional(),
+  images: z.array(z.instanceof(File)).optional()
 });
 
-type FormValues = z.infer<typeof formSchema>;
-
-interface SymptomImage {
-  symptomName: string;
-  imageData: string;
+interface FormValues {
+  symptoms: string[];
+  date?: string;
+  notes?: string;
+  images?: File[];
 }
 
 interface MedicalFormProps {
@@ -44,7 +38,7 @@ interface MedicalFormProps {
 
 const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProfile, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  
+  const [symptomFiles, setSymptomFiles] = useState<File[]>([]);
 
   const steps = [
     { id: 1, title: 'Symptoms', icon: <Thermometer />, description: 'Add your symptoms' },
@@ -54,7 +48,6 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
   const totalSteps = steps.length;
   const [completeSteps, setCompleteSteps] = useState<number[]>([]);
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
-  const [symptomImages, setSymptomImages] = useState<SymptomImage[]>([]);
   const [currentDate, setCurrentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const { control, handleSubmit, formState: { errors } } = useForm<FormValues>({
@@ -62,7 +55,6 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
     defaultValues: {
       symptoms: [],
       date: currentDate,
-      symptomImages: [],
     },
   });
 
@@ -71,11 +63,7 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
       control._formValues.symptoms = selectedSymptoms;
     }
     control._formValues.date = currentDate;
-
-    if (symptomImages.length > 0) {
-      control._formValues.symptomImages = symptomImages;
-    }
-  }, [selectedSymptoms, control, currentDate, symptomImages]);
+  }, [selectedSymptoms, control, currentDate]);
 
   const nextStep = () => {
     if (currentStep < totalSteps) {
@@ -93,12 +81,15 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
   };
 
   const onSubmit = (data: FormValues) => {
-    console.log('Form submitted:', data);
-    const fullData = {
-      ...data,
-      ...(userProfile || {})
+    const submissionData = {
+      date: data.date || format(new Date(), 'yyyy-MM-dd'),
+      symptoms: selectedSymptoms,
+      notes: data.notes || '',
+      images: symptomFiles
     };
-    handleFormSubmit(fullData);
+    
+    handleFormSubmit(submissionData);
+    
     if (onClose) {
       onClose();
     }
@@ -108,33 +99,11 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
     setSelectedSymptoms(selectedSymptoms.filter(s => s !== symptom));
   };
 
-  const handleImageUpload = (symptomName: string, event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      const reader = new FileReader();
-      
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          const imageData = e.target.result as string;
-          
-          const existingImageIndex = symptomImages.findIndex(img => img.symptomName === symptomName);
-          
-          if (existingImageIndex >= 0) {
-            const updatedImages = [...symptomImages];
-            updatedImages[existingImageIndex] = { symptomName, imageData };
-            setSymptomImages(updatedImages);
-          } else {
-            setSymptomImages([...symptomImages, { symptomName, imageData }]);
-          }
-        }
-      };
-      
-      reader.readAsDataURL(file);
+      setSymptomFiles(prev => [...prev, file]);
     }
-  };
-  
-  const removeSymptomImage = (symptomName: string) => {
-    setSymptomImages(symptomImages.filter(img => img.symptomName !== symptomName));
   };
 
   return (
@@ -194,6 +163,24 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
                         />
                       </div>
                     </div>
+                    {/* Add notes field */}
+                    <div className="mb-6">
+                      <Label
+                        htmlFor="notes"
+                        className="block text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Notes (optional)
+                      </Label>
+                      <textarea
+                        id="notes"
+                        className="w-full p-2 border rounded-md"
+                        rows={4}
+                        onChange={(e) => {
+                          control._formValues.notes = e.target.value;
+                        }}
+                        placeholder="Add any additional notes about your symptoms"
+                      />
+                    </div>
                     <Autocomplete
                       selectedSymptoms={selectedSymptoms}
                       onSymptomsChange={(updatedSymptoms) => {
@@ -222,71 +209,45 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
                             </div>
                           ))}
                         </div>
+                        {/* Image upload section */}
                         <div className="mt-6 border-t pt-4">
                           <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                             <Image size={18} className="mr-2" />
-                            Upload symptom images (optional)
+                            Upload symptom image (optional)
                           </h3>
 
                           <div className="space-y-4">
-                            {selectedSymptoms.map((symptom) => {
-                              const symptomImage = symptomImages.find(
-                                (img) => img.symptomName === symptom
-                              );
-
-                              return (
-                                <div
-                                  key={`img-${symptom}`}
-                                  className="border rounded-md p-3"
-                                >
-                                  <div className="flex justify-between items-center mb-2">
-                                    <span className="font-medium">
-                                      {symptom}
-                                    </span>
-                                    {symptomImage && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          removeSymptomImage(symptom)
-                                        }
-                                        className="text-red-500 hover:text-red-700"
-                                      >
-                                        Remove image
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  {symptomImage ? (
-                                    <div className="mt-2">
-                                      <img
-                                        src={symptomImage.imageData}
-                                        alt={`Image for ${symptom}`}
-                                        className="max-h-40 rounded-md"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="mt-1">
-                                      <Label
-                                        htmlFor={`image-${symptom}`}
-                                        className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                                      >
-                                        <Image size={16} className="mr-2" />
-                                        Upload Image
-                                      </Label>
-                                      <Input
-                                        id={`image-${symptom}`}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) =>
-                                          handleImageUpload(symptom, e)
-                                        }
-                                        className="hidden"
-                                      />
-                                    </div>
-                                  )}
+                            <div className="border rounded-md p-3">
+                              {symptomFiles.length > 0 ? (
+                                <div className="mt-2">
+                                  <p>{symptomFiles.length} file(s) selected</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSymptomFiles([])}
+                                    className="text-red-500 hover:text-red-700"
+                                  >
+                                    Remove image
+                                  </button>
                                 </div>
-                              );
-                            })}
+                              ) : (
+                                <div className="mt-1">
+                                  <Label
+                                    htmlFor="symptom-image"
+                                    className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                                  >
+                                    <Image size={16} className="mr-2" />
+                                    Upload Image
+                                  </Label>
+                                  <Input
+                                    id="symptom-image"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -462,28 +423,6 @@ const NewMedicalForm: React.FC<MedicalFormProps> = ({ handleFormSubmit, userProf
                       <p className="text-blue-100 break-words">
                         {selectedSymptoms.join(", ")}
                       </p>
-                    </div>
-                  )}
-
-                  {symptomImages.length > 0 && (
-                    <div className="col-span-2 mt-4">
-                      <h3 className="text-sm font-medium text-gray-500 mb-2">
-                        Symptom Images
-                      </h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {symptomImages.map((img, index) => (
-                          <div key={index} className="border rounded-md p-2">
-                            <p className="text-xs text-gray-500 mb-1">
-                              {img.symptomName}
-                            </p>
-                            <img
-                              src={img.imageData}
-                              alt={`Image for ${img.symptomName}`}
-                              className="max-h-32 mx-auto rounded"
-                            />
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   )}
                 </div>
