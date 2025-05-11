@@ -1,5 +1,7 @@
 import csv
 from fuzzywuzzy import fuzz
+from fastapi import Request
+from typing import Optional
 
 unique_symptoms = set()
 
@@ -78,3 +80,8 @@ def match_symptoms(diseases_dict, symptoms_to_match, threshold=80):
         if all(any(fuzz.ratio(symptom, s) >= threshold for s in symptoms) for symptom in symptoms_to_match):
             matched_diseases.append(disease)
     return matched_diseases
+
+def get_file_url(request: Request, file_path: Optional[str]) -> Optional[str]:
+    if not file_path:
+        return None
+    return f"{request.base_url}uploads/{file_path.split('/')[-1]}"
