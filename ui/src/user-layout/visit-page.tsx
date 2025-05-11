@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, FileText, Calendar, ArrowLeft, Eye } from 'lucide-react';
-import { getFileUrl } from '@/utils/fileHelpers';
+import { getImageUrl } from '@/utils/api';
 
 interface Session {
   id: string;
@@ -298,14 +298,11 @@ export default function VisitPage({
                     {selectedSession.symptom_image_url && (
                       <div>
                         <h3 className="text-lg font-medium mb-2">Symptom Images</h3>
-                        <div className="flex flex-wrap gap-4">
-                          <img 
-                            src={getFileUrl(selectedSession.symptom_image_url)}
-                            alt="Symptom Image"
-                            className="max-h-60 object-cover rounded-md cursor-pointer"
-                            onClick={() => window.open(getFileUrl(selectedSession.symptom_image_url), '_blank')}
-                          />
-                        </div>
+                        <img 
+                          src={getImageUrl(selectedSession.symptom_image_url)}
+                          alt="Symptom"
+                          className="max-h-60 object-cover rounded-md"
+                        />
                       </div>
                     )}
                   </div>
@@ -453,8 +450,7 @@ export default function VisitPage({
                     {effectiveSelectedReport.file_url && (
                       <div className="flex flex-col items-center space-y-4">
                         <Button 
-                          onClick={() => effectiveSelectedReport.file_url && 
-                            window.open(getFileUrl(effectiveSelectedReport.file_url), '_blank')}
+                          onClick={() => effectiveSelectedReport.file_url && window.open(effectiveSelectedReport.file_url, '_blank')}
                           className="w-full"
                         >
                           View Full Report
@@ -467,7 +463,7 @@ export default function VisitPage({
                         ) : ['jpg', 'jpeg', 'png', 'gif'].some(ext => 
                           effectiveSelectedReport.file_url?.toLowerCase().endsWith(`.${ext}`)) ? (
                           <img 
-                            src={getFileUrl(effectiveSelectedReport.file_url)} 
+                            src={effectiveSelectedReport.file_url} 
                             alt="Report Image"
                             className="max-h-80 object-contain rounded-md border"
                           />
