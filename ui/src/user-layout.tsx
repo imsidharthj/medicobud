@@ -9,6 +9,7 @@ import PersonalInformationPage from "@/user-profile/personal-information";
 import { AddDoctorForm } from './form/add-doctor-form';
 import { Toaster } from 'sonner';
 import SymptomSessionModal from './user-layout/popup';
+import { getImageUrl } from '@/utils/api';
 
 function UserLayout() {
   const { user } = useUser();
@@ -68,12 +69,22 @@ function UserLayout() {
   };
 
   const handleSubmit = async (data: {
+    doctorId?: string;
+    doctorName?: string;
+    notes?: string;
     date: string;
     symptoms: string[];
-    images: string[];
+    images?: File[];
   }) => {
     if (!selectedVisit || !selectedVisit.id) {
       alert("Please select a doctor visit first");
+      return;
+    }
+
+    const validSymptoms = data.symptoms.filter(symptom => symptom.trim() !== '');
+    
+    if (validSymptoms.length < 3) {
+      alert("Please provide at least three symptoms");
       return;
     }
 
@@ -81,22 +92,19 @@ function UserLayout() {
     setSessionError(undefined);
 
     try {
-      let symptomImageUrl = null;
-      if (data.images && data.images.length > 0) {
-        symptomImageUrl = data.images[0];
-      }
+      const formData = new FormData();
+      formData.append('session_date', data.date || new Date().toISOString());
+      
+      validSymptoms.forEach(symptom => {
+        formData.append('symptoms', symptom);
+      });
+      
+      if (data.notes) formData.append('notes', data.notes);
+      if (data.images?.[0]) formData.append('symptom_image', data.images[0]);
 
       const response = await fetch(`http://127.0.0.1:8000/visits/${selectedVisit?.id}/symptoms/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_date: data.date || new Date().toISOString(),
-          symptoms: data.symptoms.filter((symptom: string) => symptom.trim() !== ''),
-          symptom_image_url: symptomImageUrl,
-          notes: null
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -120,6 +128,7 @@ function UserLayout() {
       console.error('Error submitting symptoms:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error saving symptoms. Please try again.';
       setSessionError(errorMessage);
+      setSessionData(null);
       setModalOpen(true);
       return null;
     } finally {
@@ -331,7 +340,7 @@ function UserLayout() {
       symptoms: Array.isArray(data.symptoms) ? data.symptoms : [],
       diagnosis: data.diagnosis || [],
       notes: data.notes || '',
-      symptom_image_url: data.symptom_image_url || ''
+      symptom_image_url: data.symptom_image_url ? getImageUrl(data.symptom_image_url) : ''
     };
   };
 
