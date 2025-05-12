@@ -281,6 +281,13 @@ export default function VisitPage({
                       </ul>
                     </div>
                     
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">Session Date</h3>
+                      <p className="bg-slate-50 p-3 rounded-md">
+                        {new Date(selectedSession.session_date || selectedSession.date || '').toLocaleDateString()}
+                      </p>
+                    </div>
+                    
                     {selectedSession.diagnosis && (
                       <div>
                         <h3 className="text-lg font-medium mb-2">Diagnosis</h3>
@@ -303,6 +310,13 @@ export default function VisitPage({
                           alt="Symptom"
                           className="max-h-60 object-cover rounded-md"
                         />
+                      </div>
+                    )}
+
+                    {selectedSession?.notes && (
+                      <div>
+                        <h3 className="text-lg font-medium mb-2">Notes</h3>
+                        <p className="bg-slate-50 p-3 rounded-md whitespace-pre-line">{selectedSession.notes}</p>
                       </div>
                     )}
                   </div>
