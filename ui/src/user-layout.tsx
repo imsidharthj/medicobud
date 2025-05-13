@@ -9,7 +9,7 @@ import PersonalInformationPage from "@/user-profile/personal-information";
 import { AddDoctorForm } from './form/add-doctor-form';
 import { Toaster } from 'sonner';
 import SymptomSessionModal from './user-layout/popup';
-import { getImageUrl } from '@/utils/api';
+import { getImageUrl, API_BASE_URL } from '@/utils/api';
 
 function UserLayout() {
   const { user } = useUser();
@@ -279,7 +279,7 @@ function UserLayout() {
     
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/visits/${selectedVisit.id}/lab-reports/${reportId}`
+        `${API_BASE_URL}/visits/${selectedVisit.id}/lab-reports/${reportId}`
       );
       
       if (!response.ok) {
@@ -287,7 +287,10 @@ function UserLayout() {
       }
       
       const data = await response.json();
-      return data;
+      return {
+        ...data,
+        file_url: getImageUrl(data.file_url)
+      };
     } catch (error) {
       console.error('Error fetching lab report details:', error);
       throw error;
