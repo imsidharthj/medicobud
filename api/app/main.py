@@ -29,6 +29,7 @@ from .api_methods.profile import router as profile_router
 from .api_methods.doctorVisit import router as doctor_visit_router
 from .api_methods.labReport import router as lab_report_router
 from .api_methods.symptomSession import router as symptom_session_router
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -53,6 +54,8 @@ app.include_router(profile_router)
 app.include_router(doctor_visit_router)
 app.include_router(lab_report_router)
 app.include_router(symptom_session_router)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/")
