@@ -38,7 +38,6 @@ import { CalendarIcon, FileUp, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-// Define the form schema
 const labReportSchema = z.object({
   reportName: z.string().min(2, "Report name is required"),
   doctorId: z.string().min(1, "Doctor is required"),
@@ -47,13 +46,10 @@ const labReportSchema = z.object({
   }),
   reportType: z.string().min(1, "Report type is required"),
   notes: z.string().optional(),
-  // We'll handle file validation separately
 });
 
-// Define the type based on the schema
 type LabReportFormValues = z.infer<typeof labReportSchema>;
 
-// Props interface
 interface LabReportFormProps {
   doctorId?: string;
   handleSubmit: (data: LabReportFormValues & { file?: File }) => void;
@@ -347,15 +343,17 @@ export default function LaboratoryReportForm({
         </Form>
       </CardContent>
       <CardFooter className="flex justify-end gap-2 border-t border-blue-100 py-4">
-        {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-        )}
+        <Button 
+          type="button" 
+          variant="ghost" 
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
         <Button 
           type="submit" 
+          variant="blueButton"
           onClick={form.handleSubmit(onSubmit)}
-          className="bg-blue-500 hover:bg-blue-600 text-white"
         >
           Save Report
         </Button>

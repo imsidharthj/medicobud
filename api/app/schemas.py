@@ -68,6 +68,14 @@ class SymptomSessionBase(BaseModel):
     symptom_image_url: Optional[str] = None
     notes: Optional[str] = None
 
+    @validator('symptom_image_url')
+    def validate_image_url(cls, v):
+        if v is not None:
+            valid_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+            if not any(v.lower().endswith(ext) for ext in valid_extensions) and not v.startswith('http'):
+                raise ValueError('Invalid image URL. Must end with .jpg, .jpeg, .png, or .gif')
+        return v
+
 class SymptomSessionCreate(SymptomSessionBase):
     pass
 
