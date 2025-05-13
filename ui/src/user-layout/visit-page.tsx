@@ -17,15 +17,12 @@ interface Session {
 
 interface Report {
   id?: string;
-  name?: string;
-  report_name?: string;
-  date?: string;
-  report_date?: string;
-  type?: string;
-  report_type?: string;
-  file_url?: string;
-  notes?: string;
+  report_name: string;
+  report_type: string;
   doctor_name?: string;
+  report_date: string;
+  notes?: string;
+  file_url: string;
 }
 
 interface VisitPageProps {
@@ -66,7 +63,7 @@ export default function VisitPage({
   labReports,
   selectedReport,
   setSelectedReport,
-  sessionsRefreshTrigger = 0,
+  // sessionsRefreshTrigger = 0,
 }: VisitPageProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -86,17 +83,37 @@ export default function VisitPage({
   const [showNewSessionForm, setShowNewSessionForm] = useState(false);
   const [showNewReportForm, setShowNewReportForm] = useState(false);
   const [localSelectedReport, setLocalSelectedReport] = useState<Report | null>(null);
+  const [activeTab, setActiveTab] = useState('sessions');
 
-  const effectiveReports = labReports || reports;
+  const effectiveReports = labReports || reports || [];
   const effectiveSelectedReport = selectedReport || localSelectedReport;
-  const setEffectiveSelectedReport = setSelectedReport || setLocalSelectedReport;
+  const setEffectiveSelectedReport = (report: Report | null) => {
+    if (setSelectedReport) {
+      setSelectedReport(report);
+    } else {
+      setLocalSelectedReport(report);
+    }
+  };
 
   useEffect(() => {
+    setSelectedSession(null);
+    setShowNewSessionForm(false);
+    setLoading(prev => ({
+      ...prev,
+      sessions: false,
+      sessionDetails: false
+    }));
+    setError(prev => ({
+      ...prev,
+      sessions: null,
+      sessionDetails: null
+    }));
+
     if (fetchSymptomSessions && visitId) {
       setLoading(prev => ({...prev, sessions: true}));
       fetchSymptomSessions(visitId)
         .then(data => {
-          setSessions(data);
+          setSessions(data || []);
           setLoading(prev => ({...prev, sessions: false}));
         })
         .catch(err => {
@@ -104,10 +121,14 @@ export default function VisitPage({
           setError(prev => ({...prev, sessions: err.message}));
           setLoading(prev => ({...prev, sessions: false}));
         });
+    } else {
+      setSessions([]);
     }
-  }, [fetchSymptomSessions, visitId, sessionsRefreshTrigger]);
+  }, [visitId, fetchSymptomSessions]);
   
   useEffect(() => {
+    setLocalSelectedReport(null);
+    
     if (fetchLabReports && !labReports) {
       setLoading(prev => ({...prev, reports: true}));
       fetchLabReports()
@@ -121,7 +142,7 @@ export default function VisitPage({
           setLoading(prev => ({...prev, reports: false}));
         });
     }
-  }, [fetchLabReports, labReports]);
+  }, [fetchLabReports, labReports, visitId]);
 
   const handleAddSession = () => {
     setShowNewSessionForm(true);
@@ -163,11 +184,12 @@ export default function VisitPage({
       try {
         setLoading(prev => ({...prev, reportDetails: true}));
         const reportDetails = await fetchReportDetails(reportId);
-        setEffectiveSelectedReport(reportDetails);
+        console.log('report details: ', reportDetails)
+        setLocalSelectedReport(reportDetails);
+        // setEffectiveSelectedReport(reportDetails);
         setLoading(prev => ({...prev, reportDetails: false}));
       } catch (error) {
         console.error("Failed to fetch report details:", error);
-        // setError(prev => ({...prev, reportDetails: error.message}));
         setLoading(prev => ({...prev, reportDetails: false}));
       }
     } else {
@@ -195,7 +217,15 @@ export default function VisitPage({
         </div>
       </div>
 
-      <Tabs defaultValue="sessions">
+      <Tabs 
+        defaultValue="sessions" 
+        onValueChange={(value) => {
+          setActiveTab(value);
+          console.log('Active tab changed to:', activeTab);
+          setSelectedSession(null);
+          setShowNewSessionForm(false);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="sessions" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -390,7 +420,7 @@ export default function VisitPage({
               <CardContent>
                 {ReportFormComponent ? (
                   <ReportFormComponent 
-                    onClose={handleCloseReportForm}
+                    onCancel={handleCloseReportForm}
                     handleSubmit={(reportData: any) => {
                       if (reportFormProps.handleFormSubmit) {
                         reportFormProps.handleFormSubmit(reportData);
@@ -401,7 +431,13 @@ export default function VisitPage({
                       setShowNewReportForm(false);
                     }}
                     doctorId={doctor.id}
-                    doctors={doctors}
+                    doctors={[
+                      {
+                        id: doctor.id,
+                        name: doctor.name
+                      },
+                      ...(doctors || [])
+                    ]}
                   />
                 ) : (
                   <div className="text-center py-4">
@@ -424,7 +460,7 @@ export default function VisitPage({
                     Back to reports
                   </Button>
                   <CardTitle>
-                    {effectiveSelectedReport.report_name || effectiveSelectedReport.name}
+                    {effectiveSelectedReport.report_name}
                   </CardTitle>
                 </div>
               </CardHeader>
@@ -438,55 +474,72 @@ export default function VisitPage({
                 ) : (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
+                      {/* Report Name */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Report Name</h3>
+                        <p className="mt-1">{effectiveSelectedReport.report_name}</p>
+                      </div>
+
+                      {/* Report Type */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500">Report Type</h3>
-                        <p>{effectiveSelectedReport.report_type || effectiveSelectedReport.type}</p>
+                        <p className="mt-1">{effectiveSelectedReport.report_type}</p>
                       </div>
+
+                      {/* Date */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500">Date</h3>
-                        <p>{new Date(effectiveSelectedReport.report_date || effectiveSelectedReport.date || '').toLocaleDateString()}</p>
+                        <p className="mt-1">
+                          {new Date(effectiveSelectedReport.report_date).toLocaleDateString()}
+                        </p>
                       </div>
+
+                      {/* Doctor */}
                       {effectiveSelectedReport.doctor_name && (
                         <div>
                           <h3 className="text-sm font-medium text-gray-500">Doctor</h3>
-                          <p>{effectiveSelectedReport.doctor_name}</p>
+                          <p className="mt-1">{effectiveSelectedReport.doctor_name}</p>
                         </div>
                       )}
                     </div>
-                    
+
+                    {/* Notes */}
                     {effectiveSelectedReport.notes && (
                       <div>
                         <h3 className="text-lg font-medium mb-2">Notes</h3>
-                        <p className="bg-slate-50 p-3 rounded-md whitespace-pre-line">{effectiveSelectedReport.notes}</p>
+                        <p className="bg-slate-50 p-3 rounded-md whitespace-pre-line">
+                          {effectiveSelectedReport.notes}
+                        </p>
                       </div>
                     )}
-                    
+
+                    {/* File Preview */}
                     {effectiveSelectedReport.file_url && (
-                      <div className="flex flex-col items-center space-y-4">
-                        <Button 
-                          onClick={() => effectiveSelectedReport.file_url && window.open(effectiveSelectedReport.file_url, '_blank')}
-                          className="w-full"
-                        >
-                          View Full Report
-                        </Button>
-                        {effectiveSelectedReport.file_url.toLowerCase().endsWith('.pdf') ? (
-                          <div className="bg-slate-100 p-4 rounded-md w-full text-center">
-                            <FileText className="h-16 w-16 text-gray-400 mx-auto mb-2" />
-                            <p>PDF Document</p>
-                          </div>
-                        ) : ['jpg', 'jpeg', 'png', 'gif'].some(ext => 
-                          effectiveSelectedReport.file_url?.toLowerCase().endsWith(`.${ext}`)) ? (
-                          <img 
-                            src={effectiveSelectedReport.file_url} 
-                            alt="Report Image"
-                            className="max-h-80 object-contain rounded-md border"
-                          />
-                        ) : (
-                          <div className="bg-slate-100 p-4 rounded-md w-full text-center">
-                            <FileText className="h-16 w-16 text-gray-400 mx-auto mb-2" />
-                            <p>Document</p>
-                          </div>
-                        )}
+                      <div className="mt-4">
+                        <h3 className="text-lg font-medium mb-2">Report File</h3>
+                        <div className="flex flex-col items-center space-y-4">
+                          {/* Preview based on file type */}
+                          {effectiveSelectedReport.file_url.toLowerCase().endsWith('.pdf') ? (
+                            <div className="bg-slate-50 p-4 rounded-md w-full text-center">
+                              <FileText className="h-16 w-16 mx-auto mb-2 text-gray-400" />
+                              <p>PDF Document</p>
+                            </div>
+                          ) : (
+                            <img 
+                              src={getImageUrl(effectiveSelectedReport.file_url)}
+                              alt="Report"
+                              className="max-h-80 object-contain rounded-md border"
+                            />
+                          )}
+                          
+                          {/* View/Download Button */}
+                          <Button 
+                            onClick={() => window.open(getImageUrl(effectiveSelectedReport.file_url), '_blank')}
+                            className="w-full max-w-md"
+                          >
+                            View Full Report
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -518,10 +571,10 @@ export default function VisitPage({
                         <CardContent className="p-4 flex justify-between items-center">
                           <div>
                             <h4 className="font-medium">
-                              {report.report_name || report.name}
+                              {report.report_name}
                             </h4>
                             <p className="text-sm text-gray-500">
-                              {new Date(report.report_date || report.date || '').toLocaleDateString()} • {report.report_type || report.type}
+                              {new Date(report.report_date).toLocaleDateString()} • {report.report_type}
                             </p>
                           </div>
                           <div className="flex gap-2">
