@@ -31,14 +31,14 @@ export default function HomePage() {
             </ul>
             <div className="mt-8 md:mt-5 lg:mt-5">
               <Button variant="blueButton" size="lg" className="w-full sm:w-auto text-base sm:text-lg sm:px-8 sm:py-6">
-                <Link to="/diagnosis">Start Interview</Link>
+                <Link to="/diagnosis-wizard">Start Interview</Link>
               </Button>
             </div>
           </div>
           {/* Right Content */}
           <div className="flex items-center justify-center p-8 md:p-8 lg:p-16">
             <div className="h-auto md:h-125 max-w-6xl sm:max-w-md md:max-w-lg lg:max-w-2xl">
-              <img src="/homepage-form.png" alt="MediComate" className="w-full h-auto object-contain rounded-lg sm:rounded-xl" />
+              <img src="/medicobud_form_2.png" alt="MediComate" className="w-full h-auto object-contain rounded-lg sm:rounded-xl" />
             </div>
           </div>
         </div>
