@@ -113,26 +113,25 @@ class SessionService:
         
         # Handle static question steps
         elif current_step in self.static_questions:
-            last_question = state["asked_questions"][current_step][-1] if state["asked_questions"][current_step] else None
-            if last_question:
-                if current_step == "identify_person":
-                    state["person_type"] = "self" if "myself" in user_input.lower() else "someone_else"
-                    if state["person_type"] == "someone_else":
-                        state["person_details"] = {"relation": user_input.split("for ")[-1]}
-                elif current_step == "symptoms":
-                    next_message = self._process_symptom_input(state, user_input)
-                elif current_step == "care_medication":
-                    # Save medication response
-                    state[current_step][last_question] = user_input
-                else:
-                    state[current_step][last_question] = user_input
-            
-            remaining_questions = [q for q in self.static_questions[current_step] if q not in state["asked_questions"][current_step]]
-            if remaining_questions:
-                next_message = remaining_questions[0]
+            last_q = state["asked_questions"][current_step][-1] if state["asked_questions"][current_step] else None
+            if last_q and current_step == "symptoms":
+                # we just ran _process_symptom_input
+                next_message = self._process_symptom_input(state, user_input)
+                # **if we still have fewer than 3 symptoms, stay here**
+                if len(state["symptoms"]) < 3:
+                    state["asked_questions"]["symptoms"].append(next_message)
+                    # remain on 'symptoms' step
+                    return self._finalize_response(db, session_id, user_input, next_message)
+                # else fall through to advance step
+            # … existing per-question handlers for other steps …
+            # now check remaining_questions as before
+            remaining = [q for q in self.static_questions[current_step]
+                         if q not in state["asked_questions"][current_step]]
+            if remaining:
+                next_message = remaining[0]
                 state["asked_questions"][current_step].append(next_message)
             else:
-                # Move to the next step in the flow
+                # advance to next step (timing_intensity) since we have ≥3 symptoms
                 current_index = self.steps.index(current_step)
                 if current_index < len(self.steps) - 1:
                     state["current_step"] = self.steps[current_index + 1]
@@ -166,14 +165,14 @@ class SessionService:
                     # Special handling for results step
                     elif state["current_step"] == "results":
                         try:
-                            # Generate diagnosis based on collected information
-                            # Use generate_diagnosis instead of diagnose
-                            diagnosis_results = self.diagnosis_service.generate_diagnosis(
+                            # Call the main diagnose method from DiagnosisService
+                            diagnosis_data = self.diagnosis_service.diagnose(
                                 state["symptoms"], 
                                 self._extract_background_data(state)
                             )
-                            next_message = self._format_diagnosis_results({"diagnosis": diagnosis_results})
-                            state["diagnosis_results"] = {"diagnosis": diagnosis_results}
+                            # _format_diagnosis_results in SessionService will now handle the new structure
+                            next_message = self._format_diagnosis_results(diagnosis_data)
+                            state["diagnosis_results"] = diagnosis_data
                             self._save_summary(db, session_id, state)
                         except Exception as e:
                             print(f"Error generating diagnosis: {str(e)}")
@@ -194,15 +193,15 @@ class SessionService:
                 
                 if is_complete:
                     state["current_step"] = "results"
-                    # Update symptoms list with all confirmed symptoms from the interview
                     state["symptoms"] = session["confirmed_symptoms"]
-                    # Use generate_diagnosis instead of diagnose
-                    diagnosis_results = self.diagnosis_service.generate_diagnosis(
-                        session["confirmed_symptoms"], 
+                    # Call the main diagnose method from DiagnosisService
+                    diagnosis_data = self.diagnosis_service.diagnose(
+                        state["symptoms"], 
                         self._extract_background_data(state)
                     )
-                    next_message = self._format_diagnosis_results({"diagnosis": diagnosis_results})
-                    state["diagnosis_results"] = {"diagnosis": diagnosis_results}
+                    # _format_diagnosis_results in SessionService will now handle the new structure
+                    next_message = self._format_diagnosis_results(diagnosis_data)
+                    state["diagnosis_results"] = diagnosis_data
                     self._save_summary(db, session_id, state)
                 else:
                     next_message = next_question
@@ -288,46 +287,63 @@ class SessionService:
             print(f"Error saving session summary: {str(e)}")
             # Continue without raising to avoid breaking the flow
 
-    def _format_diagnosis_results(self, diagnosis_results):
-        """Format diagnosis results into a user-friendly message"""
-        if not diagnosis_results or "diagnosis" not in diagnosis_results:
-            return "Based on the information provided, I couldn't determine a specific condition. Please consult a healthcare professional."
-        
-        diseases = diagnosis_results["diagnosis"][:3]  # Show top 3
-        
-        message = "Based on your symptoms, possible conditions include:\n\n"
-        for disease in diseases:
-            conf = disease.get("confidence", 0)
-            message += f"• {disease['disease']} ({conf:.1f}% confidence)\n"
-        
-        message += "\nPlease note: This is not a medical diagnosis. Always consult with a healthcare professional."
+    def _format_diagnosis_results(self, diagnosis_data: Dict[str, Any]) -> str:
+        primary_diagnosis = diagnosis_data.get("diagnosis", [])
+        secondary_diagnosis = diagnosis_data.get("secondary_diagnosis", [])
+        disclaimer = diagnosis_data.get("disclaimer", "\nPlease note: This is not a medical diagnosis. Always consult with a healthcare professional.")
+
+        message = "Based on your symptoms, here's a preliminary assessment:\n\n"
+
+        if primary_diagnosis:
+            message += "**Primary Assessment (Local Model - Top 5):**\n"
+            for d in primary_diagnosis:
+                disease = d.get("disease", "Unknown Condition")
+                conf = d.get("confidence", 0)
+                message += f"• {disease} ({conf:.1f}% confidence)\n"
+            message += "\n"
+        else:
+            message += "Could not determine a primary assessment from the local model at this time.\n\n"
+
+        if secondary_diagnosis:
+            message += "**Secondary Assessment (AI Refined):**\n"
+            for d in secondary_diagnosis:
+                disease = d.get("disease", "Unknown Condition")
+                conf_text = ""
+                if "confidence" in d and d["confidence"] is not None:
+                    try:
+                        conf_val = float(d["confidence"]) 
+                        conf_text = f" (Confidence: {conf_val*100:.1f}%)"
+                    except (ValueError, TypeError):
+                        conf_text = f" (Confidence: {d['confidence']})"
+                message += f"• {disease}{conf_text}\n"
+            message += "\n"
+        elif self.diagnosis_service.llm_client is not None:
+             message += "AI refinement for secondary assessment was not available or did not return results.\n\n"
+
+        message += disclaimer
         return message
 
     def _process_symptom_input(self, state, user_input):
-        """Process user input for symptoms step"""
-        # Extract symptoms from free text
+        """Process user input for symptoms step, de-duplicate and require >3"""
         input_lower = user_input.lower()
         potential_symptoms = []
-        
-        # Check common symptoms
         common_symptoms = ["fever", "headache", "cough", "fatigue", "pain", "nausea"]
         for symptom in common_symptoms:
             if symptom in input_lower:
                 potential_symptoms.append(symptom)
-        
-        # Extract locations of pain
         pain_locations = ["head", "chest", "stomach", "back", "throat", "joint"]
-        for location in pain_locations:
-            if location in input_lower and "pain" in input_lower:
-                potential_symptoms.append(f"{location} pain")
-        
-        # If no symptoms detected, just add the raw input
+        for loc in pain_locations:
+            if loc in input_lower and "pain" in input_lower:
+                potential_symptoms.append(f"{loc} pain")
         if not potential_symptoms and user_input.strip():
             potential_symptoms.append(user_input.strip())
-        
-        # Add to state
-        state["symptoms"].extend(potential_symptoms)
-        return f"I've noted: {', '.join(potential_symptoms)}. Any other symptoms?"
+        # Dedupe against already collected
+        existing = set(state["symptoms"])
+        new_symptoms = [s for s in potential_symptoms if s not in existing]
+        if not new_symptoms:
+            return "You already mentioned that. Any other symptoms?"
+        state["symptoms"].extend(new_symptoms)
+        return f"I've noted: {', '.join(new_symptoms)}. Any other symptoms?"
 
     def _extract_background_data(self, state):
         """Extract structured background data from conversational input"""
@@ -355,3 +371,10 @@ class SessionService:
                     background_traits["severity"] = severity
         
         return background_traits
+
+    def _finalize_response(self, db, session_id, user_input, next_message):
+        """Save both user & system messages, commit, then return."""
+        self._save_message(db, session_id, "user", user_input)
+        self._save_message(db, session_id, "system", next_message)
+        db.commit()
+        return {"message": next_message}
