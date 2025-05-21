@@ -11,6 +11,10 @@ import About from './about';
 import PersonalInformationPage from './user-profile/personal-information';
 import SecurityPage from './user-profile/password-security';
 import SettingsLayout from './user-profile/profile';
+import { Chat } from './components/Chat'; // Import the Chat component
+import { DiagnosisWizard } from './components/diagnosis/DiagnosisWizard';
+import HistoryPage from './components/history/HistoryPage'; // Import HistoryPage
+import SessionDetailPage from './components/history/SessionDetailPage';
 
 function App() {
   return (
@@ -29,6 +33,10 @@ function App() {
               <Route path="personal-information" element={<PersonalInformationPage />} />
               <Route path="password-security" element={<SecurityPage />} />
             </Route>
+            <Route path="/chat" element={<Chat />} /> {/* Route for Chat */}
+            <Route path="/diagnosis-wizard" element={<DiagnosisWizard />} /> {/* Route for Diagnosis Wizard */}
+            <Route path="/history" element={<HistoryPage />} /> {/* Route for History Page */}
+            <Route path="/history/:sessionId" element={<SessionDetailPage />} /> {/* Route for Session Detail Page */}
           </Routes>
         </div>
         <Footer />

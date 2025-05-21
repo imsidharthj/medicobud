@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FASTAPI_URL } from '@/utils/api';
 
 interface Doctor {
   id: string;
@@ -56,7 +57,7 @@ export function DoctorSidebar({ onDoctorSelect, onAddDoctor, selectedDoctorId, r
         }
 
         const response = await fetch(
-          `http://127.0.0.1:8000/visits/?clerk_user_id=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`,
+          `${FASTAPI_URL}/visits/?clerk_user_id=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`,
           {
             method: 'GET',
             headers: {
@@ -106,7 +107,7 @@ export function DoctorSidebar({ onDoctorSelect, onAddDoctor, selectedDoctorId, r
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/visits/${visitId}?clerk_user_id=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`,
+        `${FASTAPI_URL}/visits/${visitId}?clerk_user_id=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`,
         {
           method: 'DELETE',
           headers: {

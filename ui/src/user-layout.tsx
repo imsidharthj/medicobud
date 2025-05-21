@@ -9,7 +9,7 @@ import PersonalInformationPage from "@/user-profile/personal-information";
 import { AddDoctorForm } from './form/add-doctor-form';
 import { Toaster } from 'sonner';
 import SymptomSessionModal from './user-layout/popup';
-import { getImageUrl, API_BASE_URL } from '@/utils/api';
+import { getImageUrl, FASTAPI_URL } from '@/utils/api';
 
 function UserLayout() {
   const { user } = useUser();
@@ -33,7 +33,7 @@ function UserLayout() {
     contactNumber: string;
   }) => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/visits/', {
+      const response = await fetch(`${FASTAPI_URL}/visits/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,7 +102,7 @@ function UserLayout() {
       if (data.notes) formData.append('notes', data.notes);
       if (data.images?.[0]) formData.append('symptom_image', data.images[0]);
 
-      const response = await fetch(`http://127.0.0.1:8000/visits/${selectedVisit?.id}/symptoms/`, {
+      const response = await fetch(`${FASTAPI_URL}/visits/${selectedVisit?.id}/symptoms/`, {
         method: 'POST',
         body: formData,
       });
@@ -160,7 +160,7 @@ function UserLayout() {
       if (data.doctorName) formData.append('doctor_name', data.doctorName);
       if (data.file) formData.append('file', data.file);
       
-      const response = await fetch(`http://127.0.0.1:8000/visits/${selectedVisit.id}/lab-reports/`, {
+      const response = await fetch(`${FASTAPI_URL}/visits/${selectedVisit.id}/lab-reports/`, {
         method: 'POST',
         body: formData,
       });
@@ -190,7 +190,7 @@ function UserLayout() {
     
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/visits/${selectedVisit.id}/lab-reports/${reportId}`,
+        `${FASTAPI_URL}/visits/${selectedVisit.id}/lab-reports/${reportId}`,
         {
           method: 'DELETE',
         }
@@ -215,7 +215,7 @@ function UserLayout() {
 
   const fetchSymptomSessions = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/visits/${selectedVisit?.id}/symptoms/`);
+      const response = await fetch(`${FASTAPI_URL}/visits/${selectedVisit?.id}/symptoms/`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -237,7 +237,7 @@ function UserLayout() {
         throw new Error("Missing visit ID or session ID");
       }
       
-      const response = await fetch(`http://127.0.0.1:8000/visits/${effectiveVisitId}/symptoms/${sessionId}`);
+      const response = await fetch(`${FASTAPI_URL}/visits/${effectiveVisitId}/symptoms/${sessionId}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -257,7 +257,7 @@ function UserLayout() {
     }
     
     try {
-      const response = await fetch(`http://127.0.0.1:8000/visits/${selectedVisit.id}/lab-reports/`);
+      const response = await fetch(`${FASTAPI_URL}/visits/${selectedVisit.id}/lab-reports/`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -279,7 +279,7 @@ function UserLayout() {
     
     try {
       const response = await fetch(
-        `${API_BASE_URL}/visits/${selectedVisit.id}/lab-reports/${reportId}`
+        `${FASTAPI_URL}/visits/${selectedVisit.id}/lab-reports/${reportId}`
       );
       
       if (!response.ok) {

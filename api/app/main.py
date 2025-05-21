@@ -24,11 +24,12 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from .routes.jwt import verify_clerk_jwt, get_current_user_optional, get_current_user
 from .routes.webhook import router as webhook_router
 from .routes.auth import router as auth_router
-# from .api_methods.diagnosis import router as diagnosis_router
+from .routes.diagnosis import router as diagnosis_router
 from .api_methods.profile import router as profile_router
 from .api_methods.doctorVisit import router as doctor_visit_router
 from .api_methods.labReport import router as lab_report_router
 from .api_methods.symptomSession import router as symptom_session_router
+from .routes.chat import router as chat_router
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -49,11 +50,12 @@ diseases_dict = load_disease_data("dataset.csv")
 
 app.include_router(webhook_router)
 app.include_router(auth_router)
-# app.include_router(diagnosis_router)
+app.include_router(diagnosis_router, prefix="/api/diagnosis", tags=["diagnosis"])
 app.include_router(profile_router)
 app.include_router(doctor_visit_router)
 app.include_router(lab_report_router)
 app.include_router(symptom_session_router)
+app.include_router(chat_router, prefix="/api", tags=["chat"])
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

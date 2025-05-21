@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 // import ProfileCompletionModal from './ProfileCompletionModal';
 import ProfileCompletionModal from './form/ProfileComplete-form';
+import { FASTAPI_URL } from './utils/api';
 
 interface AuthContextType {
   isProfileComplete: boolean;
@@ -34,9 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("Checking profile status for:", email);
     
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/auth/verify?email=${encodeURIComponent(email)}`);
+      const response = await fetch(`${FASTAPI_URL}/api/auth/verify?email=${encodeURIComponent(email)}`);
       // console.log("Profile status request sent", response);
-      console.log("Profile status request URL:", `http://127.0.0.1:8000/api/auth/verify?email=${encodeURIComponent(email)}`);
+      console.log("Profile status request URL:", `${FASTAPI_URL}/api/auth/verify?email=${encodeURIComponent(email)}`);
       console.log("Profile status response:", response.status);
       
       if (!response.ok) {
