@@ -7,8 +7,9 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const navItem = [
-    { path: '/diagnosis', label: 'Diagnosis' },
+    { path: '/diagnosis', label: 'Records' },
     { path: '/medical-care', label: 'Medical Library' },
+    { path: '/history', label: 'History' },
     { path: '/about', label: 'About' }
   ];
 
