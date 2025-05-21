@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from "@clerk/clerk-react";
+import { FASTAPI_URL } from "@/utils/api"; // Import FASTAPI_URL
 
 interface Message {
   sender: 'user' | 'system' | 'bot'; // Adjust based on your actual sender types
@@ -76,18 +77,27 @@ export default function SessionDetailPage() {
       if (!sessionId) return;
       try {
         const token = await getToken();
-        const response = await fetch(`/api/session/${sessionId}`, {
+        // Construct the full API URL
+        const url = `${FASTAPI_URL}/api/diagnosis/session/${sessionId}`;
+        const response = await fetch(url, { // Use the constructed URL
            headers: {
             'Authorization': `Bearer ${token}`
           }
         });
         if (!response.ok) {
           if (response.status === 404) throw new Error('Session not found');
-          throw new Error('Failed to fetch session details');
+          const errorText = await response.text();
+          console.error('API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+          throw new Error(`Failed to fetch session details: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
         setSessionDetails(data);
       } catch (err) {
+        console.error('Fetch error in SessionDetailPage:', err);
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
         setLoading(false);
