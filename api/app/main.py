@@ -34,13 +34,15 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
+UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", UI_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
