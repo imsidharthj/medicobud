@@ -8,6 +8,7 @@ import { SidebarProvider, SidebarHeader, SidebarContent } from './ui/sidebar';
 import { useEffect, useState } from "react";
 import type React from "react";
 import { useUser } from "@clerk/clerk-react";
+import { FASTAPI_URL } from '@/utils/api';
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   onLibraryClick: () => void;
@@ -46,7 +47,7 @@ export function Sidebar({ className, onLibraryClick, onPersonalInfoClick, active
         setLoading(true);
         
         const profileRes = await fetch(
-          `http://localhost:8000/api/profile/?email=${encodeURIComponent(email)}`
+          `${FASTAPI_URL}/api/profile/?email=${encodeURIComponent(email)}`
         );
         if (!profileRes.ok) throw new Error("Failed to fetch profile");
         const profileData_ = await profileRes.json();

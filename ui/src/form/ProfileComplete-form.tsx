@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar, VenusAndMars, Weight, NutOff, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FASTAPI_URL } from '@/utils/api';
 
 interface ProfileCompletionModalProps {
   email: string;
@@ -156,7 +157,7 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
     try {
       const dataToSubmit = prepareDataForSubmission();
       
-      const response = await fetch('http://127.0.0.1:8000/api/auth/complete-profile', {
+      const response = await fetch(`${FASTAPI_URL}/api/auth/complete-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSubmit)
