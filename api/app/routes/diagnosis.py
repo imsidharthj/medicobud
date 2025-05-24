@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
@@ -8,6 +8,7 @@ from app.services.interview_service import InterviewService
 from app.services.session_service import SessionService
 from app.db import get_db
 from sqlalchemy.sql import text
+from app.models import UserProfile
 
 # Initialize services
 diagnosis_service = DiagnosisService(
@@ -24,6 +25,11 @@ interview_service = InterviewService(
 session_service = SessionService(interview_service, diagnosis_service)
 
 router = APIRouter()
+
+# New request models for better request handling
+class SessionStartRequest(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[str] = None
 
 # Existing Models (unchanged)
 class IdentificationRequest(BaseModel):
@@ -182,21 +188,27 @@ async def get_symptom_list():
 # New Routes for Chat Interface
 @router.post("/session/start")
 async def start_session(
-    email: Optional[str] = None,
-    user_id: Optional[str] = None,
+    request: SessionStartRequest,
+    raw_request: Request,
     db: Session = Depends(get_db)
 ):
-    # If email is provided, look up the user
-    user_profile = None
-    if email:
-        user_profile = db.query(models.UserProfile).filter(models.UserProfile.email == email).first()
-        
-        # If user not found but we should create a session anyway
-        if not user_profile:
-            print(f"Warning: Creating session for unknown email {email}")
+    try:
+        await raw_request.json()
+    except Exception as e:
+        print(f"Error parsing request body: {str(e)}")
     
-    result = session_service.start_session(db, email, user_id)
-    return result
+    if request.email:
+        try:
+            db.query(UserProfile).filter(UserProfile.email == request.email).first()
+        except Exception as db_error:
+            print(f"Database error looking up user: {str(db_error)}")
+        
+    try:
+        result = session_service.start_session(db, request.email, request.user_id)
+        return result
+    except Exception as e:
+        print(f"ERROR creating session: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Session creation error: {str(e)}")
 
 @router.post("/session/message")
 async def send_message(input: MessageInput, db: Session = Depends(get_db)):
@@ -206,7 +218,6 @@ async def send_message(input: MessageInput, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        # Log the error
         print(f"Error processing message: {str(e)}")
         raise HTTPException(status_code=500, detail="An error occurred processing your message")
 
@@ -220,16 +231,16 @@ async def list_sessions(
     query = "SELECT session_id, start_time, email, status FROM sessions"
     params = {}
     
-    # Filter by email if provided
     if email:
         query += " WHERE email = :email"
         params["email"] = email
+    else:
+        return []
         
     query += " ORDER BY start_time DESC LIMIT :limit OFFSET :skip"
     params["limit"] = limit
     params["skip"] = skip
     
-    # Wrap the query in text()
     sessions = db.execute(text(query), params).fetchall()
     
     return [
@@ -242,20 +253,28 @@ async def list_sessions(
     ]
 
 @router.get("/session/{session_id}")
-async def get_session(session_id: str, db: Session = Depends(get_db)):
-    # Get session details including user info
-    session_data = db.execute(
-        text("""SELECT s.session_id, s.start_time, s.end_time, s.status, 
+async def get_session(
+    session_id: str, 
+    email: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = """SELECT s.session_id, s.start_time, s.end_time, s.status, 
                 s.person_type, s.person_details, s.email, s.user_id,
                 u.first_name, u.last_name
            FROM sessions s
            LEFT JOIN user_profiles u ON s.email = u.email
-           WHERE s.session_id = :id"""),
-        {"id": session_id}
-    ).fetchone()
+           WHERE s.session_id = :id"""
+    
+    params = {"id": session_id}
+    
+    if email:
+        query += " AND s.email = :email"
+        params["email"] = email
+    
+    session_data = db.execute(text(query), params).fetchone()
     
     if not session_data:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session not found or access denied")
     
     messages = db.execute(
         text("SELECT sender, text, timestamp FROM messages WHERE session_id = :id ORDER BY timestamp"),
@@ -267,9 +286,8 @@ async def get_session(session_id: str, db: Session = Depends(get_db)):
         {"id": session_id}
     ).fetchone()
     
-    # Construct user info if available
     user_info = None
-    if session_data[6]:  # If email exists
+    if session_data[6]:
         user_info = {
             "email": session_data[6],
             "user_id": session_data[7],
