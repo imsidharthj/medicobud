@@ -7,8 +7,8 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const navItem = [
-    { path: '/diagnosis', label: 'Records' },
-    { path: '/medical-care', label: 'Medical Library' },
+    // { path: '/diagnosis', label: 'Records' },
+    // { path: '/medical-care', label: 'Medical Library' },
     { path: '/history', label: 'History' },
     { path: '/about', label: 'About' }
   ];
@@ -97,6 +97,17 @@ export function Navbar() {
                   {item.label}
                 </Link>
               ))}
+              <div className="flex flex-col space-y-4 items-start">
+              <SignedOut>
+                <SignInButton />
+              </SignedOut>
+              <SignedIn>
+                <UserButton
+                  afterSignOutUrl="/"
+                  userProfileUrl="/user-profile"
+                />
+              </SignedIn>
+            </div>
             </nav>
           </div>
         )}
