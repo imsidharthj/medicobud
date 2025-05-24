@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from "@clerk/clerk-react";
-import { FASTAPI_URL } from "@/utils/api"; // Import FASTAPI_URL
+import { FASTAPI_URL } from "@/utils/api";
 
 interface Message {
-  sender: 'user' | 'system' | 'bot'; // Adjust based on your actual sender types
+  sender: 'user' | 'system' | 'bot';
   text: string;
   timestamp: string;
 }
@@ -14,7 +14,6 @@ interface DiagnosisResult {
   probability: number;
   description?: string;
   symptoms_matched?: string[];
-  // Add other fields your diagnosis_results might have
 }
 
 interface SessionDetails {
@@ -24,7 +23,7 @@ interface SessionDetails {
     end_time: string | null;
     status: string;
     person_type: string | null;
-    person_details: any; // Consider defining a type for this
+    person_details: any;
   };
   user: {
     email: string | null;
@@ -34,13 +33,12 @@ interface SessionDetails {
   } | null;
   messages: Message[];
   summary: {
-    symptoms: string[] | string | null; // API returns string, might need parsing
-    background_traits: any | null; // Consider defining a type
-    diagnosis_results: DiagnosisResult[] | any | null; // API returns object, might need parsing
+    symptoms: string[] | string | null;
+    background_traits: any | null;
+    diagnosis_results: DiagnosisResult[] | any | null;
   };
 }
 
-// Helper to format date
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const options: Intl.DateTimeFormatOptions = { 
@@ -58,11 +56,10 @@ const parseJsonString = (jsonString: string | null | undefined, defaultValue: an
   try {
     return JSON.parse(jsonString);
   } catch (e) {
-    console.error("Failed to parse JSON string:", jsonString, e);
-    return defaultValue; // Or return the string itself if it's not meant to be JSON
+    console.error("Failed to parse JSON string:", e);
+    return defaultValue;
   }
 };
-
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -77,9 +74,8 @@ export default function SessionDetailPage() {
       if (!sessionId) return;
       try {
         const token = await getToken();
-        // Construct the full API URL
         const url = `${FASTAPI_URL}/api/diagnosis/session/${sessionId}`;
-        const response = await fetch(url, { // Use the constructed URL
+        const response = await fetch(url, {
            headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -97,7 +93,7 @@ export default function SessionDetailPage() {
         const data = await response.json();
         setSessionDetails(data);
       } catch (err) {
-        console.error('Fetch error in SessionDetailPage:', err);
+        console.error('Fetch error:', err);
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
         setLoading(false);
@@ -113,11 +109,9 @@ export default function SessionDetailPage() {
 
   const { session_info, messages, summary, user } = sessionDetails;
   
-  // Safely parse summary fields that might be JSON strings
   const parsedSymptoms = typeof summary.symptoms === 'string' ? parseJsonString(summary.symptoms, []) : (summary.symptoms || []);
   const parsedBackgroundTraits = typeof summary.background_traits === 'string' ? parseJsonString(summary.background_traits, {}) : (summary.background_traits || {});
   const parsedDiagnosisResults = typeof summary.diagnosis_results === 'string' ? parseJsonString(summary.diagnosis_results, []) : (summary.diagnosis_results || []);
-
 
   const renderOverview = () => (
     <div className="space-y-6">
@@ -140,7 +134,6 @@ export default function SessionDetailPage() {
       {Object.keys(parsedBackgroundTraits).length > 0 && (
         <div>
           <h3 className="text-xl font-semibold mb-2">Background Traits</h3>
-          {/* Iterate through parsedBackgroundTraits or display as a JSON string for simplicity */}
           <pre className="bg-gray-100 p-2 rounded text-sm">{JSON.stringify(parsedBackgroundTraits, null, 2)}</pre>
         </div>
       )}
@@ -154,7 +147,6 @@ export default function SessionDetailPage() {
         </div>
       )}
 
-      {/* Placeholders for data not explicitly in current summary */}
       <div><h3 className="text-xl font-semibold mb-1">Timing & Intensity:</h3> <p className="text-gray-500 italic">Data not available in summary.</p></div>
       <div><h3 className="text-xl font-semibold mb-1">Care & Medication:</h3> <p className="text-gray-500 italic">Data not available in summary.</p></div>
 
