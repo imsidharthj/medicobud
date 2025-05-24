@@ -41,15 +41,12 @@ class InterviewService:
                     model_data = pickle.load(f)
                     self.decision_tree = model_data['model']
                     self.all_symptoms = model_data['all_symptoms_list']  # Load the symptom list
-                print(f"Loaded decision tree model and symptom list from {self.model_path}")
             except KeyError:  # Handle old model files lacking 'all_symptoms_list'
-                print(f"Model file {self.model_path} is outdated (missing 'all_symptoms_list'). Retraining.")
                 self._train_decision_tree()
             except Exception as e:
-                print(f"Error loading model: {e}. Retraining.")
+                print(f"Error loading model: {e}")
                 self._train_decision_tree()
         else:
-            print(f"Model not found at {self.model_path}. Training new model.")
             self._train_decision_tree()
             
     def _train_decision_tree(self):
@@ -82,19 +79,13 @@ class InterviewService:
             # Determine the minimum number of samples for any class
             min_samples_per_class = y.value_counts().min()
             
-            print(f"Minimum samples per class in dataset: {min_samples_per_class}")
-
             if min_samples_per_class >= 3:
-                print("Sufficient samples per class. Using CalibratedClassifierCV with cv=3.")
                 self.decision_tree = CalibratedClassifierCV(base_dt, method='isotonic', cv=3)
                 self.decision_tree.fit(X, y)
             elif min_samples_per_class == 2:
-                print("Warning: Some classes have only 2 samples. Using CalibratedClassifierCV with cv=2.")
                 self.decision_tree = CalibratedClassifierCV(base_dt, method='isotonic', cv=2)
                 self.decision_tree.fit(X, y)
             else:  # min_samples_per_class is 1
-                print("Warning: Some classes have only 1 sample. Calibration with cv>=2 is not possible.")
-                print("Using uncalibrated DecisionTreeClassifier instead.")
                 base_dt.fit(X, y)
                 self.decision_tree = base_dt
             
@@ -106,7 +97,6 @@ class InterviewService:
             os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
             with open(self.model_path, 'wb') as f:
                 pickle.dump(model_data_to_save, f)
-            print(f"Decision tree model and symptom list saved to {self.model_path}")
         except Exception as e:
             print(f"Error training decision tree: {e}")
             self.decision_tree = None
@@ -161,25 +151,90 @@ class InterviewService:
             return
 
         try:
-            # Calculate PageRank on the whole graph.
-            # This returns a dictionary: {node: score}
-            pagerank_dict = nx.pagerank(self.symptom_graph, weight='weight', alpha=0.85)
+            # Get the session state to see what symptoms are already confirmed
+            state = self.sessions.get(session_id, {})
+            confirmed_symptoms = state.get('confirmed_symptoms', [])
+            
+            # Create a personalized graph by boosting weights for symptoms related to confirmed ones
+            personalized_graph = self.symptom_graph.copy()
+            
+            if confirmed_symptoms:
+                # Boost the importance of symptoms connected to already confirmed symptoms
+                for confirmed_symptom in confirmed_symptoms:
+                    normalized_confirmed = str(confirmed_symptom).strip().lower()
+                    if personalized_graph.has_node(normalized_confirmed):
+                        # Increase weights of neighbors of confirmed symptoms
+                        neighbors = list(personalized_graph.neighbors(normalized_confirmed))
+                        for neighbor in neighbors:
+                            if personalized_graph.has_edge(normalized_confirmed, neighbor):
+                                current_weight = personalized_graph[normalized_confirmed][neighbor].get('weight', 1.0)
+                                # Boost the weight by 3x for related symptoms
+                                personalized_graph[normalized_confirmed][neighbor]['weight'] = current_weight * 3.0
+                
+                # Create a personalization vector that favors symptoms related to confirmed ones
+                personalization = {}
+                total_nodes = len(personalized_graph.nodes)
+                base_prob = 0.1 / total_nodes  # Low base probability
+                
+                for node in personalized_graph.nodes:
+                    personalization[node] = base_prob
+                
+                # Give higher probability to neighbors of confirmed symptoms
+                for confirmed_symptom in confirmed_symptoms:
+                    normalized_confirmed = str(confirmed_symptom).strip().lower()
+                    if personalized_graph.has_node(normalized_confirmed):
+                        neighbors = list(personalized_graph.neighbors(normalized_confirmed))
+                        boost_prob = 0.9 / len(neighbors) if neighbors else 0
+                        for neighbor in neighbors:
+                            personalization[neighbor] = personalization.get(neighbor, base_prob) + boost_prob
+                
+                # Normalize personalization vector
+                total_prob = sum(personalization.values())
+                if total_prob > 0:
+                    personalization = {k: v/total_prob for k, v in personalization.items()}
+            else:
+                personalization = None
+            
+            # Calculate PageRank on the personalized graph
+            pagerank_dict = nx.pagerank(
+                personalized_graph, 
+                weight='weight', 
+                alpha=0.85,
+                personalization=personalization
+            )
             
             # Sort symptoms by PageRank score in descending order
             # Ensure symptoms are strings and normalized
             sorted_symptoms_with_scores = sorted(pagerank_dict.items(), key=lambda item: item[1], reverse=True)
             
-            self.pr_scores[session_id] = [str(symptom).strip().lower() for symptom, score in sorted_symptoms_with_scores if str(symptom).strip().lower()]
+            # Filter out already confirmed symptoms from the ranking
+            filtered_symptoms = []
+            confirmed_normalized = [str(s).strip().lower() for s in confirmed_symptoms]
             
-            # print(f"Calculated PageRank for session {session_id}. Top 5: {self.pr_scores[session_id][:5]}")
+            for symptom, score in sorted_symptoms_with_scores:
+                normalized_symptom = str(symptom).strip().lower()
+                if normalized_symptom and normalized_symptom not in confirmed_normalized:
+                    filtered_symptoms.append(normalized_symptom)
+            
+            self.pr_scores[session_id] = filtered_symptoms
+            
+            print(f"Calculated personalized PageRank for session {session_id}. Top 5: {self.pr_scores[session_id][:5]}")
 
         except Exception as e:
             print(f"Error calculating PageRank: {e}")
-            # Fallback: use all_symptoms, sorted alphabetically
-            fallback_symptoms = sorted([str(s).strip().lower() for s in self.all_symptoms if str(s).strip().lower()])
+            # Fallback: use all_symptoms, sorted alphabetically, excluding confirmed ones
+            state = self.sessions.get(session_id, {})
+            confirmed_symptoms = [str(s).strip().lower() for s in state.get('confirmed_symptoms', [])]
+            
+            fallback_symptoms = []
+            for s in sorted(self.all_symptoms):
+                normalized_s = str(s).strip().lower()
+                if normalized_s and normalized_s not in confirmed_symptoms:
+                    fallback_symptoms.append(normalized_s)
+            
             self.pr_scores[session_id] = fallback_symptoms
             if not fallback_symptoms:
-                 print("Warning: PageRank fallback also resulted in empty symptom list for session.")
+                print("Warning: PageRank fallback also resulted in empty symptom list for session.")
 
     def _get_next_questions(self, state: dict) -> List[str]:
         """
@@ -188,7 +243,6 @@ class InterviewService:
         """
         session_id = state['session_id']
         
-        # Calculate PageRank scores for the session if they haven't been already.
         if session_id not in self.pr_scores:
             self._calculate_pagerank(session_id)
 
@@ -198,23 +252,31 @@ class InterviewService:
             all_ranked_symptoms_for_session = self.pr_scores[session_id]
             current_pr_index = state.get('pr_index', 0)
             
-            # Number of new symptoms to suggest from PageRank in this turn
             num_suggestions_wanted = 1 
             
+            suggestions_considered = 0
+            max_symptoms_to_check = len(all_ranked_symptoms_for_session) # Safety break for loop
+
             while current_pr_index < len(all_ranked_symptoms_for_session) and \
-                  len(suggested_symptoms_for_turn) < num_suggestions_wanted:
+                  len(suggested_symptoms_for_turn) < num_suggestions_wanted and \
+                  suggestions_considered < max_symptoms_to_check:
                 
-                symptom = all_ranked_symptoms_for_session[current_pr_index]
-                # Symptom is already a normalized string from _calculate_pagerank
+                symptom = all_ranked_symptoms_for_session[current_pr_index].strip().lower() # Ensure normalization
                 
-                if symptom and symptom not in state['previous_questions']:
+                is_in_previous = symptom in state['previous_questions']
+
+                if symptom and not is_in_previous:
                     suggested_symptoms_for_turn.append(symptom)
                 
                 current_pr_index += 1
+                suggestions_considered +=1
             
-            state['pr_index'] = current_pr_index # Update pr_index in the session state
+            state['pr_index'] = current_pr_index
         
-        # print(f"PageRank suggested for turn: {suggested_symptoms_for_turn} (new pr_index: {state.get('pr_index')})")
+        if not suggested_symptoms_for_turn and current_pr_index >= len(self.pr_scores.get(session_id, [])):
+            print(f"Session {session_id}: No more new symptoms to ask from PageRank list.")
+
+
         return suggested_symptoms_for_turn
 
     def _calculate_co_occurrence(self, df: pd.DataFrame) -> dict:
@@ -266,7 +328,6 @@ class InterviewService:
         asked_count = len(state.get('previous_questions', set())) 
 
         if confirmed_count >= 5:  # Stop if 5 or more symptoms are confirmed
-            print(f"Stopping: Confirmed {confirmed_count} symptoms.")
             return True
         
         # Check if PageRank is exhausted and no pending questions
@@ -275,17 +336,10 @@ class InterviewService:
             is_pagerank_exhausted = state.get('pr_index', 0) >= len(self.pr_scores[state['session_id']])
         
         if not state.get('pending_questions') and is_pagerank_exhausted and confirmed_count > 0:
-            print("Stopping: No more questions from PageRank or pending queue.")
             return True
         
         if asked_count >= 10: # Stop after 10 "Are you experiencing X?" type questions
-            print(f"Stopping: Asked {asked_count} questions.")
             return True
-            
-        # Optional: Use decision tree confidence if reliable
-        # if self._should_stop_early(state['confirmed_symptoms']):
-        #     print("Stopping early due to high model confidence.")
-        #     return True
             
         return False
 
@@ -326,32 +380,6 @@ class InterviewService:
         if not state:
             return "Session not found. Please start a new interview."
 
-        if state["current_step"] == "cross_questioning":
-            if not state["confirmed_symptoms"]:  # Symptoms from static questions
-                state["current_step"] = "symptoms"
-                return "Please provide your symptoms."
-            else:
-                try:
-                    interview_session_id = session_id  # Use the main session_id for simplicity
-                    state["interview_session_id"] = interview_session_id
-                    
-                    # Pass normalized initial symptoms from SessionService state
-                    initial_symptoms_for_interview = [str(s).strip().lower() for s in state["confirmed_symptoms"]]
-
-                    if interview_session_id not in self.sessions:
-                        # Start interview with initial symptoms
-                        return self.start_interview(
-                            interview_session_id,
-                            initial_confirmed_symptoms=initial_symptoms_for_interview
-                        )
-                    else:  # Should ideally not happen if starting fresh
-                        # If re-entering, ensure state is consistent or re-initialize
-                        return self.process_input(interview_session_id, "")
-                except Exception as e:
-                    print(f"Error during cross-questioning: {e}")
-                    return "An error occurred. Please try again."
-
-        # Handle response to current_question
         if state.get('current_question'):
             current_q_dict = state['current_question']
             symptom_asked = current_q_dict['symptom']  # Already normalized when put into current_question
@@ -430,3 +458,54 @@ class InterviewService:
             state['current_step'] = 'results'
             return self._finalize_diagnosis(state)
         return "Is there anything else you're experiencing?"
+
+    def _finalize_diagnosis(self, state: dict) -> str:
+        """Finalize the diagnosis based on confirmed symptoms."""
+        if not self.decision_tree or not self.all_symptoms:
+            return "Model is not available. Cannot provide a diagnosis."
+
+        if not state['confirmed_symptoms']:
+            return "No symptoms were confirmed. Cannot provide a diagnosis."
+
+        # Prepare input for the model
+        input_features = pd.DataFrame(columns=self.all_symptoms)
+        current_symptoms_input = pd.Series([0] * len(self.all_symptoms), index=self.all_symptoms)
+
+        for symptom in state['confirmed_symptoms']:
+            normalized_symptom = str(symptom).strip().lower()
+            if normalized_symptom in self.all_symptoms:
+                current_symptoms_input[normalized_symptom] = 1
+        
+        input_features = pd.concat([input_features, pd.DataFrame([current_symptoms_input])], ignore_index=True)
+        
+        # Ensure all columns are present and in the correct order, fill NaNs with 0
+        input_features = input_features.reindex(columns=self.all_symptoms, fill_value=0)
+
+        try:
+            # Predict probabilities if the model supports it (CalibratedClassifierCV)
+            if hasattr(self.decision_tree, "predict_proba"):
+                probabilities = self.decision_tree.predict_proba(input_features)[0]
+                # Get the top N predictions
+                top_n = 3 
+                top_classes_indices = np.argsort(probabilities)[-top_n:][::-1]
+                
+                results = []
+                for i in top_classes_indices:
+                    disease = self.decision_tree.classes_[i]
+                    probability = probabilities[i]
+                    if probability > 0.01: # Threshold to show results
+                        results.append(f"{disease} (Confidence: {probability:.2f})")
+                
+                if not results:
+                    return "Could not determine a likely diagnosis with sufficient confidence based on the provided symptoms."
+                
+                diagnosis_str = "Based on your symptoms, potential diagnoses include:\n" + "\n".join(results)
+                return diagnosis_str
+
+            else: # Fallback for models without predict_proba (e.g., plain DecisionTreeClassifier)
+                prediction = self.decision_tree.predict(input_features)[0]
+                return f"Based on your symptoms, the most likely diagnosis is: {prediction}."
+
+        except Exception as e:
+            print(f"Error during diagnosis prediction: {e}")
+            return "An error occurred while trying to determine the diagnosis."
