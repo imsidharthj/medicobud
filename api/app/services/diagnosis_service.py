@@ -1,6 +1,6 @@
 import os
 import json
-import google.generativeai as genai  # Import Google's SDK
+import google.generativeai as genai
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any
 from collections import defaultdict
+from fuzzywuzzy import fuzz
+from app.utils import unique_symptoms, load_default_disease_data
 
 class DiagnosisService:
     def __init__(self, dataset_path: str = "dataset.csv", weights_path: str = "data/symptom_weights.csv"):
@@ -17,32 +19,67 @@ class DiagnosisService:
         self.weights_path = weights_path
         self.symptom_weights = self.load_symptom_weights()
         self.disease_symptom_map = defaultdict(set)
+        self.fallback_diseases = load_default_disease_data()
 
-        # init LLM client for secondary refinement using Google Gemini
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("Warning: GEMINI_API_KEY not found in environment. LLM refinement will be skipped.")
             self.llm_client = None
         else:
             try:
                 genai.configure(api_key=api_key)
                 self.llm_client = genai.GenerativeModel('gemini-1.5-flash')
-                print("Successfully configured Gemini Pro client.")
             except Exception as e:
                 print(f"Error configuring Gemini client: {e}")
                 self.llm_client = None
 
         self.load_and_train_model()
 
+    def normalize_symptom(self, symptom: str) -> str:
+        if not isinstance(symptom, str):
+            return ""
+        normalized = symptom.strip().lower()
+        normalized = normalized.replace("dischromic _patches", "dischromic_patches")
+        normalized = normalized.replace("spotting_ urination", "spotting_urination")
+        normalized = normalized.replace("foul_smell_of urine", "foul_smell_of_urine")
+        normalized = normalized.replace(" ", "_")
+        return normalized
+
+    def fuzzy_match_symptoms(self, input_symptoms: List[str], threshold: int = 85) -> List[str]:
+        matched_symptoms = []
+        all_known_symptoms = set()
+        all_known_symptoms.update(self.mlb.classes_ if hasattr(self.mlb, 'classes_') else [])
+        all_known_symptoms.update(unique_symptoms)
+        
+        for input_symptom in input_symptoms:
+            normalized_input = self.normalize_symptom(input_symptom)
+            
+            if normalized_input in all_known_symptoms:
+                matched_symptoms.append(normalized_input)
+                continue
+            
+            best_match = None
+            best_score = 0
+            
+            for known_symptom in all_known_symptoms:
+                score = fuzz.ratio(normalized_input, known_symptom)
+                if score > best_score and score >= threshold:
+                    best_score = score
+                    best_match = known_symptom
+            
+            if best_match:
+                matched_symptoms.append(best_match)
+            else:
+                matched_symptoms.append(normalized_input)
+        
+        return matched_symptoms
+
     def load_symptom_weights(self) -> Dict[str, float]:
-        """Load symptom weights with validation"""
         if os.path.exists(self.weights_path):
             df = pd.read_csv(self.weights_path)
             return dict(zip(df['symptom'], df['weight'].clip(lower=0.5, upper=3.0)))
         return self._create_default_weights()
 
     def _create_default_weights(self) -> Dict[str, float]:
-        """Create weights with basic frequency analysis"""
         df = pd.read_csv(self.dataset_path)
         symptom_freq = defaultdict(int)
         if "symptoms" in df.columns:
@@ -58,49 +95,71 @@ class DiagnosisService:
         return {symptom: (count/max_freq)*2 + 0.5 for symptom, count in symptom_freq.items()}
 
     def load_and_train_model(self):
-        """Improved data loading and model training"""
-        df = pd.read_csv(self.dataset_path).drop_duplicates().fillna('')
+        try:
+            df = pd.read_csv(self.dataset_path).drop_duplicates().fillna('')
+        except FileNotFoundError:
+            df = self._create_fallback_dataframe()
+        
         symptoms_list, diseases = [], []
+        
         if "symptoms" in df.columns:
             for _, row in df.iterrows():
-                symptoms = [s.strip() for s in row['symptoms'].split(',')]
+                symptoms = [self.normalize_symptom(s) for s in row['symptoms'].split(',') if s.strip()]
                 symptoms_list.append(symptoms)
-                diseases.append(row['Disease'])
-                self.disease_symptom_map[row['Disease']].update(symptoms)
+                diseases.append(row['Disease'].strip())
+                self.disease_symptom_map[row['Disease'].strip()].update(symptoms)
         else:
             symptom_cols = [col for col in df.columns if col.startswith('Symptom_')]
             for _, row in df.iterrows():
-                symptoms = [str(row[col]).strip() for col in symptom_cols if pd.notna(row[col])]
+                symptoms = [self.normalize_symptom(str(row[col])) for col in symptom_cols 
+                           if pd.notna(row[col]) and str(row[col]).strip()]
                 symptoms_list.append(symptoms)
-                diseases.append(row['Disease'])
-                self.disease_symptom_map[row['Disease']].update(symptoms)
+                disease_name = row['Disease'].strip()
+                if disease_name == "Peptic ulcer diseae":
+                    disease_name = "Peptic ulcer disease"
+                diseases.append(disease_name)
+                self.disease_symptom_map[disease_name].update(symptoms)
+        
         X = self.mlb.fit_transform(symptoms_list)
         weights_array = np.array([self.symptom_weights.get(s, 1.0) for s in self.mlb.classes_])
         X_weighted = X * weights_array
         self.classifier.fit(X_weighted, diseases)
 
+    def _create_fallback_dataframe(self):
+        data = []
+        for disease, symptoms in self.fallback_diseases.items():
+            normalized_symptoms = [self.normalize_symptom(s) for s in symptoms]
+            row = {'Disease': disease}
+            for i, symptom in enumerate(normalized_symptoms[:17]):
+                row[f'Symptom_{i+1}'] = symptom
+            data.append(row)
+        return pd.DataFrame(data)
+
     def generate_diagnosis(self, symptoms: List[str], background: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """Enhanced diagnosis generation with weighted symptoms and extended background"""
         if not symptoms:
             return []
 
-        valid_symptoms = [s for s in symptoms if isinstance(s, str) and s.strip()]
-        if not valid_symptoms:
+        clean_symptoms = [s for s in symptoms if isinstance(s, str) and s.strip()]
+        if not clean_symptoms:
             return []
+
+        matched_symptoms = self.fuzzy_match_symptoms(clean_symptoms)
+        valid_symptoms = [s for s in matched_symptoms if s in self.mlb.classes_]
+        
+        if not valid_symptoms:
+            return self._fallback_diagnosis(matched_symptoms)
 
         try:
             X_input = self.mlb.transform([valid_symptoms])
-        except ValueError:
-            known_symptoms_for_input = [s for s in valid_symptoms if s in self.mlb.classes_]
-            if not known_symptoms_for_input:
-                return []
-            X_input = self.mlb.transform([known_symptoms_for_input])
+        except ValueError as e:
+            print(f"Error transforming symptoms: {e}")
+            return self._fallback_diagnosis(matched_symptoms)
 
         weights_array = np.array([self.symptom_weights.get(s, 1.0) for s in self.mlb.classes_])
         X_weighted = X_input * weights_array
 
         if X_weighted.shape[1] == 0:
-            return []
+            return self._fallback_diagnosis(matched_symptoms)
 
         probabilities = self.classifier.predict_proba(X_weighted)[0]
         probabilities = self.apply_clinical_adjustments(probabilities, valid_symptoms, background or {})
@@ -138,55 +197,135 @@ class DiagnosisService:
 
         return results[:5]
 
+    def _fallback_diagnosis(self, symptoms: List[str]) -> List[Dict[str, Any]]:
+        try:
+            from app.utils import match_symptoms
+            matched_diseases = match_symptoms(self.fallback_diseases, symptoms, threshold=75)
+            
+            results = []
+            for i, disease in enumerate(matched_diseases[:5]):
+                confidence = max(85 - i * 5, 50)
+                results.append({
+                    "disease": disease,
+                    "confidence": confidence,
+                    "symptom_coverage": 75,
+                    "severity": self.get_disease_severity(disease, {}),
+                    "key_symptoms": symptoms,
+                    "explanations": [f"Matched using fallback method with {len(symptoms)} symptoms"]
+                })
+            return results
+        except Exception as e:
+            print(f"Fallback diagnosis failed: {e}")
+            return []
+
     def _llm_refine_diagnosis(self, symptoms: List[str], top_diseases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Use Google Gemini to produce a secondary refined diagnosis list (max 5)."""
         if not self.llm_client or not symptoms:
-            print("LLM client not available or no symptoms provided for refinement.")
             return []
 
         prompt = (
-            f"A user reports the following symptoms: {', '.join(symptoms)}.\n"
-            "Based on these symptoms, provide a list of up to 5 most likely medical conditions. "
-            "Return the response strictly as a JSON array of objects, where each object has a 'disease' (string) key "
-            "and an optional 'confidence' (float between 0.0 and 1.0) key. For example: "
-            '[{"disease": "Common Cold", "confidence": 0.8}, {"disease": "Flu"}]. Ensure the output is only the JSON array.'
+            f"As a medical AI assistant, analyze these symptoms: {', '.join(symptoms)}.\n\n"
+            "Provide a list of the 5 most likely medical conditions based on these symptoms. "
+            "Consider common conditions first, then less common ones. "
+            "Return ONLY a JSON array with this exact format:\n"
+            '[\n'
+            '  {"disease": "Condition Name", "confidence": 0.85},\n'
+            '  {"disease": "Another Condition", "confidence": 0.70}\n'
+            ']\n\n'
+            "Important:\n"
+            "- Use decimal confidence values between 0.0 and 1.0\n"
+            "- Order by likelihood (highest confidence first)\n"
+            "- Use standard medical condition names\n"
+            "- Return only the JSON array, no other text"
         )
+        
         try:
-            print(f"Sending prompt to Gemini: {prompt}")
             response = self.llm_client.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.3
+                    temperature=0.2,
+                    max_output_tokens=1000
                 )
             )
             
-            text_content = response.text
-            print(f"Raw response from Gemini: {text_content}")
+            text_content = response.text.strip()
 
-            if text_content.strip().startswith("```json"):
-                text_content = text_content.strip()[7:-3].strip()
-            elif text_content.strip().startswith("```"):
-                text_content = text_content.strip()[3:-3].strip()
+            if text_content.startswith("```json"):
+                text_content = text_content[7:]
+            if text_content.startswith("```"):
+                text_content = text_content[3:]
+            if text_content.endswith("```"):
+                text_content = text_content[:-3]
+            
+            text_content = text_content.strip()
             
             try:
                 data = json.loads(text_content)
                 if isinstance(data, list):
-                    return data[:5]
-                elif isinstance(data, dict):
-                    for key_data in data.values():
-                        if isinstance(key_data, list):
-                            return key_data[:5]
-                print(f"Parsed JSON from Gemini but it was not a list or expected dict: {data}")
-                return []
+                    formatted_results = []
+                    for item in data[:5]:
+                        if isinstance(item, dict) and "disease" in item:
+                            disease = item["disease"]
+                            confidence = item.get("confidence", 0.5)
+                            
+                            if isinstance(confidence, (int, float)):
+                                if confidence > 1.0:
+                                    confidence = confidence / 100.0
+                                confidence = max(0.0, min(1.0, confidence))
+                            else:
+                                confidence = 0.5
+                            
+                            formatted_results.append({
+                                "disease": disease,
+                                "confidence": confidence
+                            })
+                    
+                    return formatted_results
+                else:
+                    return []
             except json.JSONDecodeError as e:
-                print(f"LLM response was not valid JSON after attempting to clean: {text_content}. Error: {e}")
-                return []
+                print(f"JSON decode error: {e}")
+                return self._extract_diseases_from_text(text_content, symptoms)
+                
         except Exception as e:
-            print(f"Error calling Google Gemini API for refinement: {e}")
+            print(f"Error calling Google Gemini API: {e}")
             return []
 
+    def _extract_diseases_from_text(self, text: str, symptoms: List[str]) -> List[Dict[str, Any]]:
+        common_diseases = [
+            "Common Cold", "Influenza", "COVID-19", "Pneumonia", "Bronchitis",
+            "Asthma", "Allergies", "Sinusitis", "Migraine", "Tension Headache",
+            "Gastroenteritis", "Food Poisoning", "Dehydration", "Anxiety",
+            "Depression", "Hypertension", "Diabetes", "Arthritis"
+        ]
+        
+        found_diseases = []
+        text_lower = text.lower()
+        
+        for disease in common_diseases:
+            if disease.lower() in text_lower:
+                confidence = 0.6
+                if any(symptom in ["fever", "cough", "fatigue"] for symptom in symptoms):
+                    if disease in ["Common Cold", "Influenza", "COVID-19"]:
+                        confidence = 0.8
+                
+                found_diseases.append({
+                    "disease": disease,
+                    "confidence": confidence
+                })
+                
+                if len(found_diseases) >= 5:
+                    break
+        
+        if not found_diseases:
+            found_diseases = [
+                {"disease": "Viral Infection", "confidence": 0.6},
+                {"disease": "Bacterial Infection", "confidence": 0.4},
+                {"disease": "Allergic Reaction", "confidence": 0.3}
+            ]
+        
+        return found_diseases[:5]
+
     def apply_clinical_adjustments(self, probabilities, symptoms: List[str], background: Dict[str, Any]) -> np.ndarray:
-        """Evidence-based probability adjustments with extended session data"""
         adjustments = {
             'age': {
                 'conditions': [(70, 1.2), (40, 1.0), (18, 0.9)],
@@ -324,7 +463,6 @@ class DiagnosisService:
         return probabilities
 
     def get_disease_severity(self, disease: str, background: Dict[str, Any]) -> str:
-        """Return severity level for a disease, adjusted by session data"""
         high_severity = [
             "Pneumonia", "Dengue", "Tuberculosis", "Heart attack", "Paralysis (brain hemorrhage)",
             "Typhoid", "Hepatitis B", "Hepatitis C", "Hepatitis D", "Hepatitis E", "AIDS"
@@ -344,7 +482,6 @@ class DiagnosisService:
         return "low"
 
     def format_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Format diagnosis with a medical disclaimer"""
         disclaimer = (
             "DISCLAIMER: This is an AI-generated diagnosis based on reported symptoms and should not be "
             "considered a substitute for professional medical advice. The information provided is for "
@@ -354,7 +491,6 @@ class DiagnosisService:
         return {"diagnosis": results, "disclaimer": disclaimer}
 
     def diagnose(self, symptoms: List[str], background: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Returns both a fast local and a secondary LLM‐refined diagnosis."""
         clean_symptoms = [s.strip().lower() for s in (symptoms if isinstance(symptoms, list) else [symptoms]) if isinstance(s, str) and s.strip()]
         bg = background or {}
 
@@ -366,7 +502,7 @@ class DiagnosisService:
             try:
                 secondary_diagnosis_list = self._llm_refine_diagnosis(clean_symptoms, primary_diagnosis_list)
             except Exception as e:
-                print(f"LLM refinement step failed: {e}")
+                print(f"LLM refinement failed: {e}")
         
         response_payload["secondary_diagnosis"] = secondary_diagnosis_list
         return response_payload

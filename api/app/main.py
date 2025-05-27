@@ -34,18 +34,42 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")
+UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")  # Default from .env or code
+ACTUAL_FRONTEND_ORIGIN = "https://medicobud.com"  # The origin shown in browser errors
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# Comprehensive CORS configuration for all possible origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", UI_URL],
+    allow_origins=[
+        "http://localhost:3000",  # For local UI development
+        "https://localhost:3000",  # For local UI development (https)
+        UI_URL,  # From your .env file (currently http://app.medicobud.com)
+        ACTUAL_FRONTEND_ORIGIN,  # Explicitly add the problematic origin
+        "https://app.medicobud.com",  # If you use this variation
+        "https://medicobud.netlify.app",  # If you also use a Netlify subdomain
+        "*",  # Wildcard for broad compatibility during debugging (consider restricting in full production)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+        "svix-id",
+        "svix-timestamp",
+        "svix-signature",
+        # Add any other custom headers your frontend might send
+    ],
+    expose_headers=["Content-Type", "Authorization"],
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 diseases_dict = load_disease_data("dataset.csv")

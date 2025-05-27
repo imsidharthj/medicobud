@@ -1,18 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, status, FastAPI
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
+from pydantic import BaseModel
 
 from ..db import get_db
 from ..models import DoctorVisit, UserProfile
 from ..schemas import DoctorVisitCreate, DoctorVisitResponse, DoctorVisitUpdate
 
+# Define request models
+class VisitQueryParams(BaseModel):
+    clerk_user_id: str
+    email: str
+    skip: int = 0
+    limit: int = 100
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
 router = APIRouter(
     prefix="/visits",
     tags=["visits"],
 )
-
-app = FastAPI()
 
 @router.post("/", response_model=DoctorVisitResponse, status_code=status.HTTP_201_CREATED)
 def create_visit(
@@ -46,16 +54,11 @@ def create_visit(
 
 @router.get("/", response_model=List[DoctorVisitResponse])
 def get_visits(
-    clerk_user_id: str,
-    email: str,
-    skip: int = 0,
-    limit: int = 100,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    params: VisitQueryParams = Depends(),
     db: Session = Depends(get_db)
 ):
     user_profile = db.query(UserProfile).filter(
-        UserProfile.email == email
+        UserProfile.email == params.email
     ).first()
     
     if not user_profile:
@@ -64,16 +67,16 @@ def get_visits(
             detail="User profile not found"
         )
     
-    query = db.query(DoctorVisit).filter(DoctorVisit.user_id == clerk_user_id)
+    query = db.query(DoctorVisit).filter(DoctorVisit.user_id == params.clerk_user_id)
     
-    if start_date:
-        query = query.filter(DoctorVisit.visit_date >= start_date)
-    if end_date:
-        query = query.filter(DoctorVisit.visit_date <= end_date)
+    if params.start_date:
+        query = query.filter(DoctorVisit.visit_date >= params.start_date)
+    if params.end_date:
+        query = query.filter(DoctorVisit.visit_date <= params.end_date)
     
     query = query.order_by(DoctorVisit.visit_date.desc())
     
-    visits = query.offset(skip).limit(limit).all()
+    visits = query.offset(params.skip).limit(params.limit).all()
     return visits
 
 @router.get("/{visit_id}", response_model=DoctorVisitResponse)
