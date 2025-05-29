@@ -29,8 +29,8 @@ export default function HomePage() {
   return (
     <div className="overflow-x-hidden w-full bg-[#f0f0f0]">
       {/* Hero Section */}
-      <section className="flex items-center justify-center min-h-screen sm:min-h-[90vh] sm:px-8 md:px-16 sm:py-16 md:py-0">
-        <div className="grid grid-cols-1 md:grid-cols-2 overflow-hidden max-w-6xl w-full">
+      <section className="flex items-center justify-center min-h-screen sm:min-h-[90vh] sm:py-16 md:py-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 overflow-hidden max-w-6xl w-full mx-auto">
           {/* Left Content */}
           <div className="p-8 md:p-12 lg:p-16 flex flex-col justify-center">
             <h1 className="text-gray-900 font-serif text-3xl md:text-5xl lg:text-6xl font-normal leading-tight mb-4 sm:mb-2">
@@ -47,7 +47,7 @@ export default function HomePage() {
                 "Proactive Planning",
               ].map((item, index) => (
                 <li key={index} className="flex items-center gap-2 sm:gap-3">
-                  <CustomCheckIcon /> {/* Replaced Check with CustomCheckIcon */}
+                  <CustomCheckIcon />
                   <span>{item}</span>
                 </li>
               ))}
@@ -58,8 +58,8 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
-          {/* Right Content - Replace with MobileUI */}
-          <div className="flex items-center justify-center p-8 md:p-8 lg:p-16">
+          {/* Right Content - Padding already matches left content's internal padding */}
+          <div className="flex items-center justify-center p-8 md:p-12 lg:p-16">
             <MobileUI />
           </div>
         </div>
@@ -71,26 +71,28 @@ export default function HomePage() {
 
       <HowItWorksScroll />
 
-      {/* About Section */}
-      <section className="py-16 md:py-25 px-8 md:px-20">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center">
-          <div className="flex flex-col justify-center space-y-4 sm:space-y-6">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#2D3648] font-serif">About Medicobud</h2>
-            <p className="text-gray-700 text-base sm:text-lg md:text-xl leading-relaxed">
-              Medicobud is a free symptom checker tool that uses a healthcare database to help you understand your symptoms and possible conditions.
-              It is designed to be easy to use and provide you with the best possible information to help you understand your symptoms.
-              We want to help you make informed decisions about your health and well-being.
-            </p>
-            <div className="text-gray-700 text-base sm:text-lg md:text-xl leading-relaxed">
-              Learn More <span className="text-blue-500 cursor-pointer">about us</span>
+      {/* About Section - Apply similar consistent container and padding if needed for alignment */}
+      <section className="py-16 md:py-25">
+        <div className="max-w-6xl mx-auto px-8 md:px-12 lg:px-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12 items-center">
+            <div className="flex flex-col justify-center space-y-4 sm:space-y-6">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#2D3648] font-serif">About Medicobud</h2>
+              <p className="text-gray-700 text-base sm:text-lg md:text-xl leading-relaxed">
+                Medicobud is a free symptom checker tool that uses a healthcare database to help you understand your symptoms and possible conditions.
+                It is designed to be easy to use and provide you with the best possible information to help you understand your symptoms.
+                We want to help you make informed decisions about your health and well-being.
+              </p>
+              <div className="text-gray-700 text-base sm:text-lg md:text-xl leading-relaxed">
+                Learn More <Link to="/about" className="text-blue-500 cursor-pointer hover:text-blue-600 hover:underline">about us</Link>
+              </div>
             </div>
-          </div>
-          <div className="flex justify-center">
-            <img
-              src="/homepage-contact-us.png"
-              alt="About Medicobud"
-              className="w-full md:h-[350px] object-contain rounded-lg sm:rounded-xl"
-            />
+            <div className="flex justify-center">
+              <img
+                src="/homepage-contact-us.png"
+                alt="About Medicobud"
+                className="w-full md:h-[350px] object-contain rounded-lg sm:rounded-xl"
+              />
+            </div>
           </div>
         </div>
       </section>
