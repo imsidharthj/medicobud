@@ -18,7 +18,7 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full bg-background/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/60 bg-[#f0f0f0]">
       <div className="container mx-auto px-4">
         <div className="flex h-20 items-center justify-between md:ml-25 max-w-7xl md:mr-40">
           {/* Logo */}
