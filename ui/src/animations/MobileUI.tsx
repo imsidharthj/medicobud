@@ -1,10 +1,69 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, useAnimation, AnimatePresence } from 'framer-motion';
 
-const MobileUI = () => {
+interface MobileUIProps {
+  dynamicHeight?: number;
+}
+
+const DoctorLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
+  <div className={`${className} bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-md`}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-5 h-5 text-white"
+    >
+      <circle cx="12" cy="6" r="3" fill="currentColor" />
+      <path
+        d="M6 20V18C6 15.79 7.79 14 10 14H14C16.21 14 18 15.79 18 18V20"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <circle cx="12" cy="6" r="2.5" />
+      <path
+        d="M9 12C9 12 10 13 12 13C14 13 15 12 15 12"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <circle cx="8.5" cy="11.5" r="0.8" fill="currentColor" />
+      <circle cx="15.5" cy="11.5" r="0.8" fill="currentColor" />
+      <circle cx="12" cy="16" r="1.5" stroke="currentColor" strokeWidth="1" fill="none" />
+      <path d="M12 13.5V14.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <path d="M11.3 16H12.7M12 15.3V16.7" stroke="currentColor" strokeWidth="0.6" strokeLinecap="round" />
+    </svg>
+  </div>
+);
+
+const UserLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
+  <div className={`${className} bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-md`}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-5 h-5 text-white"
+    >
+      <circle cx="12" cy="8" r="4" fill="currentColor" />
+      <path
+        d="M6 21V19C6 16.79 7.79 15 10 15H14C16.21 15 18 16.79 18 19V21"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  </div>
+);
+
+const MobileUI: React.FC<MobileUIProps> = ({ dynamicHeight }) => {
   const [showChat, setShowChat] = useState(true);
   const [currentChatMessageIndex, setCurrentChatMessageIndex] = useState(0);
   const dashboardControls = useAnimation();
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const chatMessages = [
     { type: 'ai', text: 'Hello! How can I assist you today?' },
@@ -16,6 +75,18 @@ const MobileUI = () => {
   ];
 
   const chatSequenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  };
+
+  useEffect(() => {
+    if (showChat && currentChatMessageIndex >= 0) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [currentChatMessageIndex, showChat]);
 
   useEffect(() => {
     const advanceMessage = () => {
@@ -29,7 +100,6 @@ const MobileUI = () => {
 
       const nextIndex = currentChatMessageIndex + 1;
       const isLastMessage = nextIndex >= chatMessages.length;
-
       const delayBeforeNextMessage = 1500;
       const delayBeforeLoopRestart = 3000;
 
@@ -61,9 +131,12 @@ const MobileUI = () => {
     };
   }, [currentChatMessageIndex, showChat, chatMessages.length, dashboardControls]);
 
+  const heightStyle = dynamicHeight ? { height: `${dynamicHeight}px` } : {};
+
   return (
     <motion.div
-      className="w-[280px] h-[500px] md:w-[320px] md:h-[600px] bg-gray-800 rounded-3xl p-2 shadow-2xl relative overflow-hidden flex flex-col border-4 border-gray-300 mx-auto"
+      className="w-[280px] h-[540px] bg-gray-800 rounded-3xl p-2 shadow-2xl relative overflow-hidden flex flex-col border-4 border-gray-300 mx-auto"
+      style={heightStyle}
       initial={{ y: '-100%', opacity: 0 }}
       animate={{ y: '0%', opacity: 1 }}
       transition={{
@@ -71,21 +144,17 @@ const MobileUI = () => {
         ease: [0.175, 0.885, 0.32, 1.275]
       }}
     >
-      {/* Notch */}
       <div className="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-5 bg-gray-700 rounded-b-xl z-10"></div>
 
-      {/* Inner "Screen" */}
       <div className="bg-white rounded-2xl w-full h-full p-4 flex flex-col relative">
-        {/* Top bar with doctor and user profile */}
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-200">
           <div className="flex items-center space-x-2">
-            <img src="https://placehold.co/32x32/60A5FA/FFFFFF?text=👨‍⚕️" alt="Doctor" className="w-8 h-8 rounded-full" />
+            <DoctorLogo />
             <span className="text-sm font-medium text-gray-800">Dr. Medicobud</span>
           </div>
-          <img src="https://placehold.co/32x32/3B82F6/FFFFFF?text=👤" alt="User" className="w-8 h-8 rounded-full" />
+          <UserLogo />
         </div>
 
-        {/* Chat or Dashboard Content */}
         <AnimatePresence mode="wait">
           {showChat ? (
             <motion.div
@@ -94,7 +163,13 @@ const MobileUI = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="flex flex-col space-y-2 overflow-y-auto flex-grow text-left"
+              ref={chatContainerRef}
+              className="flex flex-col space-y-2 overflow-y-auto flex-grow text-left scroll-smooth scrollbar-hide"
+              style={{ 
+                scrollBehavior: 'smooth',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}
             >
               {chatMessages.slice(0, currentChatMessageIndex + 1).map((msg, index) => (
                 <motion.div
@@ -103,17 +178,17 @@ const MobileUI = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
                   className={`flex items-start gap-2 ${
-                    msg.type === 'user' ? 'justify-end' : 'justify-start'
+                    msg.type === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'
                   }`}
                 >
-                  <motion.img
+                  <motion.div
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ duration: 0.2, delay: index * 0.1 + 0.2 }}
-                    src={msg.type === 'ai' ? "https://placehold.co/32x32/60A5FA/FFFFFF?text=🤖" : "https://placehold.co/32x32/3B82F6/FFFFFF?text=👤"}
-                    alt={msg.type === 'ai' ? "AI Assistant" : "User"}
-                    className="w-8 h-8 rounded-full flex-shrink-0"
-                  />
+                    className="flex-shrink-0"
+                  >
+                    {msg.type === 'ai' ? <DoctorLogo /> : <UserLogo />}
+                  </motion.div>
                   <p className={`text-sm text-gray-700 p-2 rounded-lg max-w-[80%] ${
                     msg.type === 'user' ? 'bg-blue-100' : 'bg-gray-100'
                   }`}>
@@ -167,7 +242,6 @@ const MobileUI = () => {
           )}
         </AnimatePresence>
 
-        {/* Input field at the bottom of the mockup */}
         <div className="mt-4 border-t border-gray-200 pt-4">
           <input
             type="text"
