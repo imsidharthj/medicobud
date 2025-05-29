@@ -1,15 +1,22 @@
-// tailwind.config.ts
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 import typography from '@tailwindcss/typography';
 
 const config: Config = {
-  darkMode: "class", // Use a string instead of an array
+  darkMode: "class",
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    screens: {
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+      'laptop': '1000px',
+    },
     extend: {
       borderRadius: {
         lg: "var(--radius)",
@@ -55,23 +62,19 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        // Keyframes for pulse effect on chat bubble
         'pulse-subtle': {
           '0%, 100%': { transform: 'scale(1)' },
           '50%': { transform: 'scale(1.05)' },
         },
-        // Keyframes for typing indicator dots
         'bounce-dot': {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-4px)' },
         },
-        // Keyframes for abstract background blobs in hero section
         'blob': {
           '0%, 100%': { transform: 'translate(0px, 0px) scale(1)' },
           '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
           '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
         },
-        // Keyframes for soft pulse on idle chat prompt
         'pulse-soft': {
           '0%, 100%': { transform: 'scale(1)', boxShadow: '0 0 0 rgba(0, 0, 0, 0)' },
           '50%': { transform: 'scale(1.02)', boxShadow: '0 0 10px rgba(0, 0, 0, 0.2)' },
@@ -86,7 +89,6 @@ const config: Config = {
         'pulse-soft': 'pulse-soft 2s infinite ease-in-out',
       },
       transitionTimingFunction: {
-        // Custom easing for the hero section drop-in animation
         'out-back': 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
       },
       fontFamily: {
@@ -101,7 +103,6 @@ const config: Config = {
         'heading-4': '2.8rem',
         'heading-5': '2.4rem',
         'heading-6': '2.1rem',
-        // Add other custom font sizes...
       },
       animationDelay: {
         '100': '100ms',
@@ -125,6 +126,19 @@ const config: Config = {
   plugins: [
     tailwindcssAnimate,
     typography,
+    function({ addUtilities }) {
+      addUtilities({
+        '.scrollbar-hide': {
+          /* Hide scrollbar for Chrome, Safari and Opera */
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+          /* Hide scrollbar for IE, Edge and Firefox */
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
+        },
+      });
+    },
   ],
 };
 
