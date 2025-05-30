@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, VenusAndMars, Weight, NutOff, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FASTAPI_URL } from '@/utils/api';
@@ -12,7 +13,6 @@ interface ProfileCompletionModalProps {
   email: string;
   missingFields: string[];
   onComplete: () => void;
-  onDismiss: () => void;
 }
 
 // Define step interface to fix type issues
@@ -24,12 +24,62 @@ interface Step {
   field: string | null; // Allow both string and null
 }
 
-function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }: ProfileCompletionModalProps) {
+function ProfileCompletionModal({ email, missingFields, onComplete }: ProfileCompletionModalProps) {
   const [formData, setFormData] = useState<Record<string, any>>({ email });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [completeSteps, setCompleteSteps] = useState<number[]>([]);
+  
+  // Date of birth separate state for dropdowns
+  const [dobDay, setDobDay] = useState<string>('');
+  const [dobMonth, setDobMonth] = useState<string>('');
+  const [dobYear, setDobYear] = useState<string>('');
+  
+  // Helper function to calculate age from a date string (YYYY-MM-DD)
+  const calculateAge = (dobString: string): number => {
+    if (!dobString) return 0;
+    const dob = new Date(dobString);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    // Adjust age if birthday hasn't occurred yet this year
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Generate months array
+  const months = [
+    { value: '1', label: 'January' },
+    { value: '2', label: 'February' },
+    { value: '3', label: 'March' },
+    { value: '4', label: 'April' },
+    { value: '5', label: 'May' },
+    { value: '6', label: 'June' },
+    { value: '7', label: 'July' },
+    { value: '8', label: 'August' },
+    { value: '9', label: 'September' },
+    { value: '10', label: 'October' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'December' }
+  ];
+
+  // Generate years array (from current year back to 120 years ago)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 120 }, (_, i) => currentYear - i);
+
+  // Update formData when date components change
+  useEffect(() => {
+    if (dobDay && dobMonth && dobYear) {
+      const formattedDate = `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`;
+      setFormData(prev => ({
+        ...prev,
+        date_of_birth: formattedDate
+      }));
+    }
+  }, [dobDay, dobMonth, dobYear]);
   
   // Form setup with react-hook-form and improved validation
   const { control, formState: { errors }, trigger } = useForm({
@@ -188,18 +238,6 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
     }
   }
   
-  const calculateAge = (dob: string): number => {
-    if (!dob) return 0;
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
-  
   // Check if the current step can proceed
   const canProceed = () => {
     const currentStepData = steps[currentStep - 1];
@@ -299,36 +337,84 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                         Select your date of birth
                       </Label>
                       
-                      <Controller
-                        name="date_of_birth"
-                        control={control}
-                        rules={{ required: "Date of birth is required" }}
-                        render={({ field }) => (
-                          <>
-                            <Input
-                              type="date"
-                              className={`w-full h-12 p-2 border rounded mt-1 ${errors.date_of_birth ? 'border-red-500' : ''}`}
-                              max={new Date().toISOString().split("T")[0]}
-                              value={field.value}
-                              onChange={(e) => {
-                                field.onChange(e.target.value);
-                                handleInputChange("date_of_birth", e.target.value);
-                              }}
-                              required
-                            />
-                            {errors.date_of_birth && (
-                              <p className="text-sm text-red-500 mt-1">
-                                {errors.date_of_birth.message as string}
-                              </p>
-                            )}
-                            {formData.date_of_birth && (
-                              <div className="mt-2 text-sm text-gray-600">
-                                Age: {calculateAge(formData.date_of_birth)} years
-                              </div>
-                            )}
-                          </>
-                        )}
-                      />
+                      <div className="grid grid-cols-3 gap-4">
+                        {/* Day Dropdown */}
+                        <div>
+                          <Select
+                            onValueChange={(value) => {
+                              setDobDay(value);
+                              handleInputChange("date_of_birth", `${dobYear}-${dobMonth}-${value}`);
+                            }}
+                            value={dobDay}
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="Day" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                                <SelectItem key={day} value={String(day)}>
+                                  {String(day).padStart(2, '0')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Month Dropdown */}
+                        <div>
+                          <Select
+                            onValueChange={(value) => {
+                              setDobMonth(value);
+                              handleInputChange("date_of_birth", `${dobYear}-${value}-${dobDay}`);
+                            }}
+                            value={dobMonth}
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="Month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {months.map(month => (
+                                <SelectItem key={month.value} value={month.value}>
+                                  {month.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Year Dropdown */}
+                        <div>
+                          <Select
+                            onValueChange={(value) => {
+                              setDobYear(value);
+                              handleInputChange("date_of_birth", `${value}-${dobMonth}-${dobDay}`);
+                            }}
+                            value={dobYear}
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="Year" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {years.map(year => (
+                                <SelectItem key={year} value={String(year)}>
+                                  {String(year)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {errors.date_of_birth && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.date_of_birth.message as string}
+                        </p>
+                      )}
+                      {formData.date_of_birth && (
+                        <div className="mt-2 text-sm text-gray-600">
+                          Age: {calculateAge(formData.date_of_birth)} years
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -523,19 +609,15 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                             </div>
                           )}
 
-                          {fieldsToComplete.includes("allergies") && (
+                          {fieldsToComplete.includes("allergies") && 
+                           Array.isArray(formData.allergies) && 
+                           formData.allergies.length > 0 && (
                             <div>
                               <h4 className="text-sm font-medium text-gray-500">
                                 Allergies
                               </h4>
                               <p className="mt-1">
-                                {Array.isArray(formData.allergies) &&
-                                formData.allergies.length > 0
-                                  ? formData.allergies.join(", ")
-                                  : typeof formData.allergies === "string" &&
-                                    formData.allergies.trim()
-                                  ? formData.allergies
-                                  : "None"}
+                                {formData.allergies.join(", ")}
                               </p>
                             </div>
                           )}
@@ -552,18 +634,12 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                   <Button
                     type="button"
                     onClick={prevStep}
-                    variant="outline"
+                    variant="blueButton"
                   >
                     Back
                   </Button>
                 ) : (
-                  <Button
-                    type="button"
-                    onClick={onDismiss}
-                    variant="outline"
-                  >
-                    Skip
-                  </Button>
+                  <div></div>
                 )}
 
                 {currentStep < totalSteps ? (
@@ -571,7 +647,7 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                     type="button"
                     onClick={nextStep}
                     disabled={!canProceed()}
-                    variant="default"
+                    variant="blueButton"
                   >
                     Next
                   </Button>
@@ -580,7 +656,7 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                     type="button"
                     onClick={handleSubmit}
                     disabled={isSubmitting}
-                    variant="default"
+                    variant="blueButton"
                   >
                     {isSubmitting ? "Submitting..." : "Complete Profile"}
                   </Button>
@@ -667,13 +743,11 @@ function ProfileCompletionModal({ email, missingFields, onComplete, onDismiss }:
                     </div>
                   )}
 
-                  {formData.allergies && (
+                  {Array.isArray(formData.allergies) && formData.allergies.length > 0 && (
                     <div className="bg-blue-400 rounded-lg p-4">
                       <h4 className="font-medium mb-1">Allergies</h4>
                       <p className="text-blue-100 break-words">
-                        {Array.isArray(formData.allergies) && formData.allergies.length > 0
-                          ? formData.allergies.join(", ")
-                          : "None"}
+                        {formData.allergies.join(", ")}
                       </p>
                     </div>
                   )}
