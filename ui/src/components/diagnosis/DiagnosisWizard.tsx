@@ -5,14 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertCircle, Send, History, Loader2 } from 'lucide-react';
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertCircle, Send, Loader2, User, Users, Check, X, MapPin, Clock, Thermometer, Stethoscope } from 'lucide-react';
 import { FASTAPI_URL } from '@/utils/api';
 
 interface UserProfile {
@@ -39,16 +37,11 @@ interface DiagnosisResult {
   key_symptoms: string[];
 }
 
-interface SessionSummary {
-  symptoms: string[];
-  background_traits: Record<string, string>;
-  diagnosis_results: { diagnosis: DiagnosisResult[] };
-}
-
-interface Session {
-  session_id: string;
-  start_time: string;
-}
+// interface SessionSummary {
+//   symptoms: string[];
+//   background_traits: Record<string, string>;
+//   diagnosis_results: { diagnosis: DiagnosisResult[] };
+// }
 
 interface SessionData {
   sessionId?: string;
@@ -74,10 +67,6 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentInput, setCurrentInput] = useState<string>('');
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [sessionDetails, setSessionDetails] = useState<{ messages: Message[], summary: SessionSummary } | null>(null);
-  const [showHistory, setShowHistory] = useState<boolean>(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
@@ -93,7 +82,6 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
       }));
     }
     startSession();
-    fetchSessions();
   }, [userProfile]);
 
   useEffect(() => {
@@ -141,32 +129,6 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     } catch (err) {
       setError('Failed to start session');
       setLoading(false);
-    }
-  };
-
-  const fetchSessions = async () => {
-    try {
-      const email = user?.emailAddresses[0]?.emailAddress;
-      const url = email 
-        ? `${FASTAPI_URL}/api/diagnosis/sessions?email=${encodeURIComponent(email)}`
-        : `${FASTAPI_URL}/api/diagnosis/sessions`;
-        
-      const response = await fetch(url);
-      const data = await response.json();
-      setSessions(data);
-    } catch (err) {
-      console.error('Failed to fetch sessions', err);
-    }
-  };
-
-  const fetchSessionDetails = async (sessionId: string) => {
-    try {
-      const response = await fetch(`${FASTAPI_URL}/api/diagnosis/session/${sessionId}`);
-      const data = await response.json();
-      setSessionDetails(data);
-      setSelectedSession(sessionId);
-    } catch (err) {
-      console.error('Failed to fetch session details', err);
     }
   };
 
@@ -278,11 +240,13 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     ];
     
     return (
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-1 mb-3">
         {commonSymptoms.map(symptom => (
           <Button 
             key={symptom}
             variant='blueButton'
+            size="sm"
+            className="text-xs py-1 px-2 h-7"
             onClick={() => processMessage(symptom, true)}
           >
             {symptom}
@@ -297,135 +261,280 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     
     if (lastMessage.includes('yourself or someone else')) {
       return (
-        <RadioGroup
-          onValueChange={(value) => processMessage(value, true)}
-          className="grid grid-cols-2 gap-2"
-        >
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="Myself" id="myself" />
-            <Label htmlFor="myself">Myself</Label>
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-center mb-2">Who are you seeking diagnosis for?</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+            <div
+              className="border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-blue-500 hover:bg-blue-50"
+              onClick={() => processMessage('Myself', true)}
+            >
+              <div className="w-5 h-5 text-blue-500 mr-2">
+                <User className="w-full h-full" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Myself</p>
+                <p className="text-xs text-gray-500">For my own symptoms</p>
+              </div>
+            </div>
+
+            <div
+              className="border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-blue-500 hover:bg-blue-50"
+              onClick={() => processMessage('Someone else', true)}
+            >
+              <div className="w-5 h-5 text-blue-500 mr-2">
+                <Users className="w-full h-full" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Someone else</p>
+                <p className="text-xs text-gray-500">Helping someone else</p>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="Someone else" id="someone_else" />
-            <Label htmlFor="someone_else">Someone else</Label>
-          </div>
-        </RadioGroup>
-      );
-    } else if (lastMessage.includes('substances') || lastMessage.includes('doctor') || lastMessage.includes('medication')) {
+        </div>
+      )} else if (lastMessage.includes('substances') || lastMessage.includes('doctor') || lastMessage.includes('medication') || lastMessage.includes('Are you experiencing')) {
+      const isSubstances = lastMessage.includes('substances');
+      const isDoctor = lastMessage.includes('doctor');
+      const isMedication = lastMessage.includes('medication');
+      
+      let questionTitle = 'Please select an option';
+      let yesText = 'Yes';
+      let noText = 'No';
+      let yesIcon = <Check className="w-full h-full" />;
+      let noIcon = <X className="w-full h-full" />;
+      let yesColor = 'green';
+      let noColor = 'red';
+      
+      if (isSubstances) {
+        questionTitle = 'Have you used any substances recently?';
+        yesText = 'Yes, I have';
+        noText = 'No, I haven\'t';
+      } else if (isDoctor) {
+        questionTitle = 'Have you seen a doctor recently?';
+        yesText = 'Yes, recently';
+        noText = 'No, not recently';
+        yesIcon = <Stethoscope className="w-full h-full" />;
+        yesColor = 'blue';
+        noColor = 'gray';
+      } else if (isMedication) {
+        questionTitle = 'Are you currently taking any medication?';
+        yesText = 'Yes, taking medication';
+        noText = 'No medication';
+      }
+
       return (
-        <RadioGroup
-          onValueChange={(value) => processMessage(value, true)}
-          className="grid grid-cols-2 gap-2"
-        >
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="Yes" id="yes" />
-            <Label htmlFor="yes">Yes</Label>
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-center mb-2">{questionTitle}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+            <div
+              className={`border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-${yesColor}-500 hover:bg-${yesColor}-50`}
+              onClick={() => processMessage('Yes', true)}
+            >
+              <div className={`w-5 h-5 text-${yesColor}-500 mr-2`}>
+                {yesIcon}
+              </div>
+              <p className="text-xs font-medium">{yesText}</p>
+            </div>
+
+            <div
+              className={`border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-${noColor}-500 hover:bg-${noColor}-50`}
+              onClick={() => processMessage('No', true)}
+            >
+              <div className={`w-5 h-5 text-${noColor}-500 mr-2`}>
+                {noIcon}
+              </div>
+              <p className="text-xs font-medium">{noText}</p>
+            </div>
           </div>
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="No" id="no" />
-            <Label htmlFor="no">No</Label>
-          </div>
-        </RadioGroup>
+        </div>
       );
     } else if (lastMessage.includes('traveled')) {
       return (
-        <Select onValueChange={(value) => processMessage(value, true)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select travel status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Yes">Recently traveled</SelectItem>
-            <SelectItem value="No">No recent travel</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-center mb-2">Have you traveled recently?</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+            <div
+              className="border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-blue-500 hover:bg-blue-50"
+              onClick={() => processMessage('Yes', true)}
+            >
+              <div className="w-5 h-5 text-blue-500 mr-2">
+                <MapPin className="w-full h-full" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Recently traveled</p>
+                <p className="text-xs text-gray-500">Past few weeks</p>
+              </div>
+            </div>
+
+            <div
+              className="border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-gray-500 hover:bg-gray-50"
+              onClick={() => processMessage('No', true)}
+            >
+              <div className="w-5 h-5 text-gray-500 mr-2">
+                <X className="w-full h-full" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">No recent travel</p>
+                <p className="text-xs text-gray-500">Haven't traveled</p>
+              </div>
+            </div>
+          </div>
+        </div>
       );
     } else if (lastMessage.includes('symptoms start')) {
+      const timeOptions = [
+        { value: 'Less than a day', label: 'Less than a day', description: 'Just started', color: 'red', textColor: 'text-red-500' },
+        { value: '1-3 days', label: '1-3 days', description: 'Recent onset', color: 'orange', textColor: 'text-orange-500' },
+        { value: '4-7 days', label: '4-7 days', description: 'About a week', color: 'yellow', textColor: 'text-yellow-600' },
+        { value: 'More than a week', label: 'More than a week', description: 'Ongoing', color: 'blue', textColor: 'text-blue-500' }
+      ];
+
       return (
-        <Select onValueChange={(value) => processMessage(value, true)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select duration" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Less than a day">Less than a day</SelectItem>
-            <SelectItem value="1-3 days">1-3 days</SelectItem>
-            <SelectItem value="4-7 days">4-7 days</SelectItem>
-            <SelectItem value="More than a week">More than a week</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-center mb-2">When did your symptoms start?</h3>
+          <div className="grid grid-cols-2 gap-1">
+            {timeOptions.map((option) => (
+              <div
+                key={option.value}
+                className={`border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-${option.color}-500 hover:bg-${option.color}-50`}
+                onClick={() => processMessage(option.value, true)}
+              >
+                <div className={`w-4 h-4 ${option.textColor} mr-1 flex items-center justify-center`}>
+                  <Clock className="w-full h-full" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium">{option.label}</p>
+                  <p className="text-xs text-gray-500">{option.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    } else if (lastMessage.includes('temperature')) {
+      const temperatureOptions = [
+        { value: 'Normal (98-99°F)', label: 'Normal', description: '98-99°F', color: 'green', textColor: 'text-green-500' },
+        { value: 'Low-grade (99-100°F)', label: 'Low-grade fever', description: '99-100°F', color: 'yellow', textColor: 'text-yellow-600' },
+        { value: 'Moderate (100-102°F)', label: 'Moderate fever', description: '100-102°F', color: 'orange', textColor: 'text-orange-500' },
+        { value: 'High (>102°F)', label: 'High fever', description: '>102°F', color: 'red', textColor: 'text-red-500' }
+      ];
+
+      return (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-center mb-2">What's your current temperature?</h3>
+          <div className="grid grid-cols-2 gap-1">
+            {temperatureOptions.map((option) => (
+              <div
+                key={option.value}
+                className={`border border-gray-200 rounded-md p-2 flex items-center cursor-pointer transition-all duration-200 hover:border-${option.color}-500 hover:bg-${option.color}-50`}
+                onClick={() => processMessage(option.value, true)}
+              >
+                <div className={`w-4 h-4 ${option.textColor} mr-1`}>
+                  <Thermometer className="w-full h-full" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium">{option.label}</p>
+                  <p className="text-xs text-gray-500">{option.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       );
     } else if (lastMessage.includes('severe')) {
       return (
         <div className="space-y-2">
-          <Label>Severity (1-10)</Label>
-          <Slider
-            min={1}
-            max={10}
-            step={1}
-            value={[parseInt(currentInput) || 5]}
-            onValueChange={([value]) => setCurrentInput(value.toString())}
-          />
-          <div className="text-center">
-            {currentInput || 5}: {parseInt(currentInput || '5') <= 3 ? 'Mild' : parseInt(currentInput || '5') <= 7 ? 'Moderate' : 'Severe'}
+          <h3 className="text-xs font-medium text-center">How severe are your symptoms?</h3>
+          <div className="p-3 border border-gray-200 rounded-md bg-gray-50">
+            <Label className="text-xs font-medium mb-2 block text-center">Severity Level (1-10)</Label>
+            <div className="space-y-2">
+              <Slider
+                min={1}
+                max={10}
+                step={1}
+                value={[parseInt(currentInput) || 5]}
+                onValueChange={([value]) => setCurrentInput(value.toString())}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>1 - Mild</span>
+                <span className="font-semibold text-xs text-blue-600">
+                  {currentInput || 5}: {parseInt(currentInput || '5') <= 3 ? 'Mild' : parseInt(currentInput || '5') <= 7 ? 'Moderate' : 'Severe'}
+                </span>
+                <span>10 - Severe</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 mt-2">
+                <div className={`p-1 rounded text-center ${parseInt(currentInput || '5') <= 3 ? 'bg-green-100 border border-green-500' : 'bg-gray-100 border border-gray-300'}`}>
+                  <p className="text-xs font-medium">Mild</p>
+                  <p className="text-xs text-gray-600">1-3</p>
+                </div>
+                <div className={`p-1 rounded text-center ${parseInt(currentInput || '5') > 3 && parseInt(currentInput || '5') <= 7 ? 'bg-yellow-100 border border-yellow-500' : 'bg-gray-100 border border-gray-300'}`}>
+                  <p className="text-xs font-medium">Moderate</p>
+                  <p className="text-xs text-gray-600">4-7</p>
+                </div>
+                <div className={`p-1 rounded text-center ${parseInt(currentInput || '5') > 7 ? 'bg-red-100 border border-red-500' : 'bg-gray-100 border border-gray-300'}`}>
+                  <p className="text-xs font-medium">Severe</p>
+                  <p className="text-xs text-gray-600">8-10</p>
+                </div>
+              </div>
+              <Button 
+                onClick={() => processMessage(currentInput || '5', true)}
+                className="w-full mt-2 h-8 text-xs"
+                variant="blueButton"
+              >
+                Continue with Level {currentInput || 5}
+              </Button>
+            </div>
           </div>
-          <Button onClick={() => processMessage(currentInput || '5', true)}>Submit</Button>
         </div>
-      );
-    } else if (lastMessage.includes('temperature')) {
-      return (
-        <Select onValueChange={(value) => processMessage(value, true)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select temperature" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Normal (98-99°F)">Normal (98-99°F)</SelectItem>
-            <SelectItem value="Low-grade (99-100°F)">Low-grade (99-100°F)</SelectItem>
-            <SelectItem value="Moderate (100-102°F)">Moderate (100-102°F)</SelectItem>
-            <SelectItem value="High (>102°F)">High (102°F)</SelectItem>
-          </SelectContent>
-        </Select>
       );
     } else if (lastMessage.includes('symptoms')) {
       return (
-        <div className="space-y-4">
-          <h4 className="text-sm font-medium">Common symptoms:</h4>
-          {renderCommonSymptoms()}
-          <div className="text-sm mb-1">Or enter your own symptoms:</div>
+        <div className="space-y-2">
+          <div className="text-center">
+            <h4 className="text-xs font-medium mb-1">What symptoms are you experiencing?</h4>
+            <p className="text-xs text-gray-600">Click common symptoms or describe your own</p>
+          </div>
+          
+          <div className="bg-blue-50 p-2 rounded-md">
+            <h5 className="text-xs font-medium text-blue-800 mb-1">Common Symptoms</h5>
+            {renderCommonSymptoms()}
+          </div>
+          
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-gray-500 font-medium">Or enter custom</span>
+            </div>
+          </div>
+          
           <div className="space-y-2">
             <Textarea
-              placeholder="List symptoms (e.g., headache, fever)"
+              placeholder="Describe your symptoms (e.g., headache, fever, nausea)"
               value={currentInput}
               onChange={(e) => setCurrentInput(e.target.value)}
+              className="min-h-[60px] border border-gray-200 focus:border-blue-500 text-xs"
             />
-            <Button onClick={() => processMessage(currentInput, true)} disabled={!currentInput.trim()}>
-              Submit
+            <Button 
+              onClick={() => processMessage(currentInput, true)} 
+              disabled={!currentInput.trim()}
+              className="w-full h-8 text-xs"
+              variant="blueButton"
+            >
+              Submit Symptoms
             </Button>
           </div>
         </div>
       );
-    } else if (lastMessage.includes('Are you experiencing')) {
-      return (
-        <RadioGroup
-          onValueChange={(value) => processMessage(value, true)}
-          className="grid grid-cols-2 gap-2"
-        >
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="Yes" id="yes" />
-            <Label htmlFor="yes">Yes</Label>
-          </div>
-          <div className="flex items-center space-x-2 p-3 rounded-md border">
-            <RadioGroupItem value="No" id="no" />
-            <Label htmlFor="no">No</Label>
-          </div>
-        </RadioGroup>
-      );
     } else if (lastMessage.includes('possible conditions include')) {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Diagnosis Results</h3>
+          <h3 className="text-lg font-semibold text-center">Diagnosis Results</h3>
           {sessionData.diagnosis_results?.map((result, index) => (
             <div
               key={index}
-              className={`p-4 border rounded-lg ${
+              className={`p-4 border-2 rounded-xl ${
                 result.severity === 'high'
                   ? 'border-red-300 bg-red-50'
                   : result.severity === 'medium'
@@ -436,7 +545,7 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
               <div className="flex justify-between items-center mb-2">
                 <h4 className="font-semibold">{result.disease}</h4>
                 <span
-                  className={`text-sm px-2 py-1 rounded-full ${
+                  className={`text-sm px-3 py-1 rounded-full font-medium ${
                     result.severity === 'high'
                       ? 'bg-red-100 text-red-800'
                       : result.severity === 'medium'
@@ -467,7 +576,9 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
               This is an AI-generated diagnosis. Consult a healthcare provider for professional advice.
             </AlertDescription>
           </Alert>
-          <Button onClick={() => navigate('/dashboard')}>Finish</Button>
+          <Button onClick={() => navigate('/dashboard')} className="w-full h-12" variant="blueButton">
+            Finish Diagnosis
+          </Button>
         </div>
       );
     } else {
@@ -482,11 +593,13 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
                 processMessage(currentInput);
               }
             }}
+            className="border-2 border-gray-200 focus:border-blue-500"
           />
           <Button
             variant='blueButton'
             onClick={() => processMessage(currentInput)}
             disabled={!currentInput.trim() || loading}
+            className="px-6"
           >
             <Send className="w-4 h-4" />
           </Button>
@@ -495,99 +608,11 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     }
   };
 
-  const renderHistory = () => (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Session History</h3>
-      {sessions.length === 0 ? (
-        <p>No previous sessions found.</p>
-      ) : (
-        <div className="space-y-2">
-          {sessions.map((session) => (
-            <div
-              key={session.session_id}
-              className="p-3 border rounded-md cursor-pointer hover:bg-gray-100"
-              onClick={() => fetchSessionDetails(session.session_id)}
-            >
-              <p className="font-medium">Session: {session.session_id}</p>
-              <p className="text-sm text-gray-500">
-                Started: {new Date(session.start_time).toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-      {selectedSession && sessionDetails && (
-        <Tabs defaultValue="messages" className="mt-4">
-          <TabsList>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-          </TabsList>
-          <TabsContent value="messages">
-            <div className="border rounded-lg h-64 overflow-y-auto p-4">
-              {sessionDetails.messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`mb-3 ${message.sender === 'user' ? 'text-right' : ''}`}
-                >
-                  <div
-                    className={`inline-block p-3 rounded-lg max-w-[80%] ${
-                      message.sender === 'user'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {message.text}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {new Date(message.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
-          <TabsContent value="summary">
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium">Symptoms</h4>
-                <p>{sessionDetails.summary.symptoms.join(', ') || 'None'}</p>
-              </div>
-              <div>
-                <h4 className="font-medium">Background Traits</h4>
-                <ul className="list-disc pl-5">
-                  {Object.entries(sessionDetails.summary.background_traits).map(([key, value]) => (
-                    <li key={key}>{key}: {value}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium">Diagnosis Results</h4>
-                {sessionDetails.summary.diagnosis_results?.diagnosis?.map((result, index) => (
-                  <div key={index} className="p-2 border rounded-md mt-2">
-                    <p><strong>{result.disease}</strong>: {result.confidence}%</p>
-                    <p>Severity: {result.severity}</p>
-                    <p>Symptoms: {result.key_symptoms.join(', ')}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      )}
-    </div>
-  );
-
   return (
     <Card className="w-full max-w-3xl mx-auto">
       <div className="p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">MedicoBud Assistant</h2>
-          <Button
-            variant='blueButton'
-            onClick={() => setShowHistory(true)}
-          >
-            <History className="w-4 h-4 mr-2" />
-            View History
-          </Button>
         </div>
         {error && (
           <Alert className="mb-4" variant="destructive">
@@ -595,28 +620,16 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {showHistory ? (
-          <div>
-            <Button
-              variant="outline"
-              onClick={() => setShowHistory(false)}
-              className="mb-4"
-            >
-              Back to Chat
-            </Button>
-            {renderHistory()}
-          </div>
-        ) : (
-          <>
-            <div 
-              ref={chatContainerRef}
-              className="border rounded-lg h-80 overflow-y-auto p-4 mb-6"
-            >
-              {sessionData.messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`mb-3 ${message.sender === 'user' ? 'text-right' : ''}`}
-                >
+        <div 
+          ref={chatContainerRef}
+          className="border rounded-lg h-[calc(100vh-300px)] overflow-y-auto p-4 mb-6"
+        >
+          {sessionData.messages.map((message, index) => {
+            const isLastSystemMessage = index === sessionData.messages.length - 1 && message.sender === 'system';
+            
+            return (
+              <div key={index}>
+                <div className={`mb-3 ${message.sender === 'user' ? 'text-right' : ''}`}>
                   <div
                     className={`inline-block p-3 rounded-lg max-w-[80%] ${
                       message.sender === 'user'
@@ -630,20 +643,34 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
                     {new Date(message.timestamp).toLocaleString()}
                   </p>
                 </div>
-              ))}
-              <div ref={messagesEndRef} className="h-0.5" />
+                
+                {/* Show selection UI inline for the last system message */}
+                {isLastSystemMessage && (
+                  <div className="mt-4 mb-4">
+                    {renderInput()}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          
+          {loading && (
+            <div className="flex justify-start mb-3">
+              <div className="bg-gray-100 p-3 rounded-lg">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+              </div>
             </div>
-            <div className="min-h-[150px]">
-              {loading ? (
-                <div className="flex justify-center items-center p-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : (
-                renderInput()
-              )}
+          )}
+          
+          <div ref={messagesEndRef} className="h-0.5" />
+        </div>
+        <div className="min-h-[100px]">
+          {loading ? (
+            <div className="flex justify-center items-center p-4">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-          </>
-        )}
+          ) : null}
+        </div>
       </div>
     </Card>
   );
