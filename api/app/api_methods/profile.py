@@ -31,9 +31,17 @@ def update_profile( update_data: UserProfileUpdate, email: str, db: Session = De
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    for field, value in update_data.dict(exclude_unset=True).items():
+    update_dict = update_data.dict(exclude_unset=True)
+
+    for field, value in update_dict.items():
         setattr(profile, field, value)
     
     db.commit()
     db.refresh(profile)
+
+    if profile.allergies is not None and isinstance(profile.allergies, str):
+        profile.allergies = [a.strip() for a in profile.allergies.split(',') if a.strip()]
+    elif profile.allergies is None:
+        profile.allergies = []
+        
     return profile

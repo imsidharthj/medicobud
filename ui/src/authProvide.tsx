@@ -36,7 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       const response = await fetch(`${FASTAPI_URL}/api/auth/verify?email=${encodeURIComponent(email)}`);
-      // console.log("Profile status request sent", response);
       console.log("Profile status request URL:", `${FASTAPI_URL}/api/auth/verify?email=${encodeURIComponent(email)}`);
       console.log("Profile status response:", response.status);
       
@@ -65,16 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isSignedIn) {
       checkProfileStatus();
     }
-  }, [isSignedIn, user?.id]); // Added user?.id to the dependency array
+  }, [isSignedIn, user?.id]);
   
   const handleProfileComplete = () => {
     console.log("Profile completed");
     setIsProfileComplete(true);
-    setShowProfileModal(false);
-  };
-  
-  const handleProfileDismiss = () => {
-    console.log("Profile completion dismissed");
     setShowProfileModal(false);
   };
   
@@ -87,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email={user.primaryEmailAddress.emailAddress}
           missingFields={missingFields}
           onComplete={handleProfileComplete}
-          onDismiss={handleProfileDismiss}
         />
       )}
     </AuthContext.Provider>
