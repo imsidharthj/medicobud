@@ -1,9 +1,12 @@
 import { Button } from "./components/ui/button";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useUser } from '@clerk/clerk-react'; // Import useUser
+import { useState } from 'react'; // Import useState
 import MobileUI from "./animations/MobileUI";
 import FeaturesSection from "./components/Features/FeatureSection";
 import HowItWorksScroll from "./animations/HowItWorksScroll";
 import FullPageTextAnimation from "./animations/FullPageTextAnimation";
+import { DiagnosisStartModal } from "./components/diagnosis/DiagnosisStartModal"; // Import the modal
 
 const CustomCheckIcon = () => (
   <svg
@@ -26,6 +29,24 @@ const CustomCheckIcon = () => (
 );
 
 export default function HomePage() {
+  const { isSignedIn } = useUser();
+  const navigate = useNavigate();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleStartAnalysisClick = () => {
+    if (isSignedIn) {
+      navigate('/diagnosis-wizard');
+    } else {
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleContinueAsGuest = () => {
+    setIsModalOpen(false);
+    // Navigate to DiagnosisWizard and pass a state to indicate guest mode
+    navigate('/diagnosis-wizard', { state: { isGuestMode: true } });
+  };
+
   return (
     <div className="overflow-x-hidden w-full bg-[#f0f0f0]">
       {/* Hero Section */}
@@ -53,8 +74,14 @@ export default function HomePage() {
               ))}
             </ul>
             <div className="mt-8 md:mt-5 lg:mt-5">
-              <Button variant="blueButton" size="lg" className="w-full sm:w-auto text-base sm:text-lg sm:px-8 sm:py-6">
-                <Link to="/diagnosis-wizard">Start Analysis</Link>
+              {/* Updated Button */}
+              <Button
+                variant="blueButton"
+                size="lg"
+                className="w-full sm:w-auto text-base sm:text-lg sm:px-8 sm:py-6"
+                onClick={handleStartAnalysisClick} // Use the handler
+              >
+                Start Analysis
               </Button>
             </div>
           </div>
@@ -96,6 +123,12 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      {/* Render the modal */}
+      <DiagnosisStartModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onContinueAsGuest={handleContinueAsGuest}
+      />
     </div>
   );
 }
