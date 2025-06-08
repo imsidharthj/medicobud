@@ -59,9 +59,9 @@ function App() {
             } />
             
             <Route path="/diagnosis-wizard" element={
-              <ProtectedRoute>
+              // <ProtectedRoute>
                 <DiagnosisWizard />
-              </ProtectedRoute>
+              /* </ProtectedRoute> */
             } />
             
             <Route path="/history" element={
