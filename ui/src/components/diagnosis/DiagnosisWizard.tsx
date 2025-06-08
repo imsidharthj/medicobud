@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom'; // Added
 import { useUser } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -51,8 +52,65 @@ interface SessionData {
   diagnosis_results?: DiagnosisResult[];
 }
 
-export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userProfile }) => {
-  const { user } = useUser();
+interface DiagnosisWizardProps {
+  userProfile?: UserProfile;
+  isGuestMode?: boolean;
+}
+
+export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
+  userProfile: propUserProfile,
+  isGuestMode: propIsGuestMode = false, // Default to false if not provided
+}) => {
+  const { user, isSignedIn } = useUser();
+  const location = useLocation(); // Added
+
+  // Determine the definitive isGuestMode status
+  const routeIsGuestMode = location.state?.isGuestMode === true;
+  const actualIsGuestMode = propIsGuestMode === true || routeIsGuestMode;
+
+  // State to hold consolidated user/session information
+  const [effectiveSessionInfo, setEffectiveSessionInfo] = useState<{
+    userId?: string;
+    email?: string;
+    name?: string;
+    age?: number;
+    gender?: string;
+    isGuest: boolean;
+  }>({ isGuest: actualIsGuestMode });
+
+  useEffect(() => {
+    let userId, email, name, age, gender;
+    const currentIsGuest = propIsGuestMode === true || location.state?.isGuestMode === true;
+
+    if (currentIsGuest) {
+      // Guest mode: propGuestProfile is removed.
+      // Guest details like name, age, gender are no longer sourced from props.
+      // They would be undefined unless passed via location.state.
+      userId = `guest_route_${Date.now()}`;
+      email = 'guest@medicobud.temp'; // Standard email for guests
+      name = undefined;
+      age = undefined;
+      gender = undefined;
+    } else if (isSignedIn && user) {
+      // Authenticated user
+      userId = user.id;
+      email = user.emailAddresses?.[0]?.emailAddress;
+      // Prioritize propUserProfile for name, age, gender if provided
+      name = propUserProfile?.name || user.fullName || user.firstName;
+      age = propUserProfile?.age; // Clerk's user object doesn't typically have structured age/gender
+      gender = propUserProfile?.gender;
+    } else {
+      // Fallback: Not signed in and not explicitly in guest mode (e.g., direct URL access without state/props)
+      // This case should ideally be handled by routing or UI logic before reaching here.
+      console.warn("DiagnosisWizard: User is not signed in and not in explicit guest mode. Treating as anonymous guest.");
+      userId = `guest_anon_${Date.now()}`;
+      email = 'guest-anon@medicobud.temp';
+      name = 'Anonymous'; // Default name for this case
+      // age and gender will be undefined
+    }
+    setEffectiveSessionInfo({ userId, email, name: name ?? undefined, age, gender, isGuest: currentIsGuest });
+  }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile]); // Removed propGuestProfile from dependency array
+
   const [sessionData, setSessionData] = useState<SessionData>({
     sessionId: undefined,
     messages: [{ text: "How are you feeling today?", sender: 'system', timestamp: new Date().toISOString() }],
@@ -69,18 +127,45 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
   useEffect(() => {
-    if (userProfile) {
+    // This effect now depends on effectiveSessionInfo
+    if (effectiveSessionInfo.userId && effectiveSessionInfo.email) {
+      const initialBackgroundTraits: Record<string, string> = {};
+      if (effectiveSessionInfo.name) initialBackgroundTraits.name = effectiveSessionInfo.name;
+      if (effectiveSessionInfo.age !== undefined) initialBackgroundTraits.age = effectiveSessionInfo.age.toString();
+      if (effectiveSessionInfo.gender) initialBackgroundTraits.gender = effectiveSessionInfo.gender;
+
+      // For authenticated users, add more details from propUserProfile if available
+      if (!effectiveSessionInfo.isGuest && propUserProfile) {
+        if (propUserProfile.allergies && propUserProfile.allergies.length > 0) {
+          initialBackgroundTraits.allergies = propUserProfile.allergies.join(', ');
+        }
+        if (propUserProfile.weight !== undefined) {
+          initialBackgroundTraits.weight = propUserProfile.weight.toString();
+        }
+        if (propUserProfile.height !== undefined) {
+          initialBackgroundTraits.height = propUserProfile.height.toString();
+        }
+        if (propUserProfile.bloodType) {
+          initialBackgroundTraits.bloodType = propUserProfile.bloodType;
+        }
+      }
+
       setSessionData(prev => ({
         ...prev,
         background_traits: {
-          ...prev.background_traits,
-          age: userProfile.age.toString(),
-          gender: userProfile.gender,
-        },
+          // ...prev.background_traits, // Usually for init, so overwrite or merge carefully
+          ...initialBackgroundTraits
+        }
       }));
+      // Call startSession with the determined userId and email
+      startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
+    } else if (!loading && !sessionData.sessionId) {
+      // This condition might be hit if effectiveSessionInfo is not yet populated.
+      // setError("User information is incomplete. Cannot start session."); // Avoid setting error prematurely
+      console.log("Waiting for effective session info to start session...");
     }
-    startSession();
-  }, [userProfile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSessionInfo, propUserProfile]); // propUserProfile is needed for authenticated user's extended details
 
   useEffect(() => {
     if (sessionData.messages.length > 0) {
@@ -106,16 +191,22 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     }
   };
 
-  const startSession = async () => {
+  // Modified startSession to accept userId and email parameters
+  const startSession = async (userIdToUse?: string, emailToUse?: string) => {
+    if (!userIdToUse || !emailToUse) {
+      setError('User ID or Email is missing, cannot start session.');
+      console.error('Attempted to start session without userId or email.');
+      return;
+    }
     try {
       setLoading(true);
-      setIsDiagnosisComplete(false); 
+      setIsDiagnosisComplete(false);
       const response = await fetch(`${FASTAPI_URL}/api/diagnosis/session/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: user?.emailAddresses[0]?.emailAddress,
-          user_id: user?.id
+          email: emailToUse, // Use passed email
+          user_id: userIdToUse // Use passed user ID
         })
       });
       const data = await response.json();
@@ -566,13 +657,13 @@ export const DiagnosisWizard: React.FC<{ userProfile?: UserProfile }> = ({ userP
     );
   };
 
+  // DO NOT DELETE THIS FUNCTION
   const renderInput = () => {
-    // Hide the input field if diagnosis is complete
     if (isDiagnosisComplete) {
       return (
         <div className="text-center py-4">
           <p className="text-gray-600 mb-4">Diagnosis complete. Would you like to start a new session?</p>
-          <Button onClick={startSession} variant="blueButton">
+          <Button onClick={() => startSession()} variant="blueButton">
             Start New Session
           </Button>
         </div>
