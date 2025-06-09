@@ -41,9 +41,9 @@ export default function HomePage() {
     }
   };
 
-  const handleContinueAsGuest = () => {
+  const handleContinueAsGuest = async () => {
     setIsModalOpen(false);
-    // Navigate to DiagnosisWizard and pass a state to indicate guest mode
+    await Promise.resolve();
     navigate('/diagnosis-wizard', { state: { isGuestMode: true } });
   };
 
