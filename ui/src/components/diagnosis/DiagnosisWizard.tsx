@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom'; // Added
+import { useLocation } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Send, Loader2, User, Users, Check, X, MapPin, Clock, Thermometer, Stethoscope } from 'lucide-react';
 import { FASTAPI_URL } from '@/utils/api';
 import DiagnosisResultFormatter, { formatDiagnosisResults } from './DiagnosisResultFormatter';
+import Autocomplete from '@/data/autocomplete';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
@@ -62,13 +62,9 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   isGuestMode: propIsGuestMode = false, // Default to false if not provided
 }) => {
   const { user, isSignedIn } = useUser();
-  const location = useLocation(); // Added
-
-  // Determine the definitive isGuestMode status
+  const location = useLocation();
   const routeIsGuestMode = location.state?.isGuestMode === true;
   const actualIsGuestMode = propIsGuestMode === true || routeIsGuestMode;
-
-  // State to hold consolidated user/session information
   const [effectiveSessionInfo, setEffectiveSessionInfo] = useState<{
     userId?: string;
     email?: string;
@@ -83,33 +79,25 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     const currentIsGuest = propIsGuestMode === true || location.state?.isGuestMode === true;
 
     if (currentIsGuest) {
-      // Guest mode: propGuestProfile is removed.
-      // Guest details like name, age, gender are no longer sourced from props.
-      // They would be undefined unless passed via location.state.
       userId = `guest_route_${Date.now()}`;
-      email = 'guest@medicobud.temp'; // Standard email for guests
+      email = 'guest@medicobud.temp';
       name = undefined;
       age = undefined;
       gender = undefined;
     } else if (isSignedIn && user) {
-      // Authenticated user
       userId = user.id;
       email = user.emailAddresses?.[0]?.emailAddress;
-      // Prioritize propUserProfile for name, age, gender if provided
       name = propUserProfile?.name || user.fullName || user.firstName;
-      age = propUserProfile?.age; // Clerk's user object doesn't typically have structured age/gender
+      age = propUserProfile?.age;
       gender = propUserProfile?.gender;
     } else {
-      // Fallback: Not signed in and not explicitly in guest mode (e.g., direct URL access without state/props)
-      // This case should ideally be handled by routing or UI logic before reaching here.
       console.warn("DiagnosisWizard: User is not signed in and not in explicit guest mode. Treating as anonymous guest.");
       userId = `guest_anon_${Date.now()}`;
       email = 'guest-anon@medicobud.temp';
-      name = 'Anonymous'; // Default name for this case
-      // age and gender will be undefined
+      name = 'Anonymous';
     }
     setEffectiveSessionInfo({ userId, email, name: name ?? undefined, age, gender, isGuest: currentIsGuest });
-  }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile]); // Removed propGuestProfile from dependency array
+  }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile]);
 
   const [sessionData, setSessionData] = useState<SessionData>({
     sessionId: undefined,
@@ -122,19 +110,17 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentInput, setCurrentInput] = useState<string>('');
+  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [isDiagnosisComplete, setIsDiagnosisComplete] = useState<boolean>(false); 
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
   useEffect(() => {
-    // This effect now depends on effectiveSessionInfo
     if (effectiveSessionInfo.userId && effectiveSessionInfo.email) {
       const initialBackgroundTraits: Record<string, string> = {};
       if (effectiveSessionInfo.name) initialBackgroundTraits.name = effectiveSessionInfo.name;
       if (effectiveSessionInfo.age !== undefined) initialBackgroundTraits.age = effectiveSessionInfo.age.toString();
       if (effectiveSessionInfo.gender) initialBackgroundTraits.gender = effectiveSessionInfo.gender;
-
-      // For authenticated users, add more details from propUserProfile if available
       if (!effectiveSessionInfo.isGuest && propUserProfile) {
         if (propUserProfile.allergies && propUserProfile.allergies.length > 0) {
           initialBackgroundTraits.allergies = propUserProfile.allergies.join(', ');
@@ -153,19 +139,14 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       setSessionData(prev => ({
         ...prev,
         background_traits: {
-          // ...prev.background_traits, // Usually for init, so overwrite or merge carefully
           ...initialBackgroundTraits
         }
       }));
-      // Call startSession with the determined userId and email
       startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
     } else if (!loading && !sessionData.sessionId) {
-      // This condition might be hit if effectiveSessionInfo is not yet populated.
-      // setError("User information is incomplete. Cannot start session."); // Avoid setting error prematurely
       console.log("Waiting for effective session info to start session...");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveSessionInfo, propUserProfile]); // propUserProfile is needed for authenticated user's extended details
+  }, [effectiveSessionInfo, propUserProfile]);
 
   useEffect(() => {
     if (sessionData.messages.length > 0) {
@@ -191,7 +172,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     }
   };
 
-  // Modified startSession to accept userId and email parameters
   const startSession = async (userIdToUse?: string, emailToUse?: string) => {
     if (!userIdToUse || !emailToUse) {
       setError('User ID or Email is missing, cannot start session.');
@@ -205,8 +185,8 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: emailToUse, // Use passed email
-          user_id: userIdToUse // Use passed user ID
+          email: emailToUse,
+          user_id: userIdToUse
         })
       });
       const data = await response.json();
@@ -231,6 +211,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       messages: [...prev.messages, userMessage],
     }));
     setCurrentInput('');
+    setSelectedSymptoms([]);
 
     try {
       setLoading(true);
@@ -306,12 +287,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const renderMessage = (message: Message, index: number) => {
     const isUser = message.sender === 'user';
     const isDiagnosisResult = message.text.includes('MEDICAL ASSESSMENT RESULTS');
-    
-    // Determine if this is the last system message that requires an input
-    // We only want to render input options for the very last system message
-    // and only if the diagnosis is not complete.
     const isLastSystemMessage = !isUser && index === sessionData.messages.length - 1;
-
     const isInitialMessage = message.text.includes('How are you feeling today') || message.text.includes('feeling today');
     const isSymptomAnalysisQuestion = message.text.includes('Would you like to start a Symptom Analysis session?');
     const isPersonQuestion = message.text.includes('yourself or someone else');
@@ -342,11 +318,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           <p className="text-xs text-gray-500 mt-1">
             {new Date(message.timestamp).toLocaleString()}
           </p>
-          
-          {/* Conditional rendering for input steps: 
-              Only show if it's the last system message AND diagnosis is NOT complete.
-              Also, don't show input for diagnosis result message itself.
-          */}
           {isLastSystemMessage && !isDiagnosisComplete && !isDiagnosisResult && (
             <>
               {isSymptomAnalysisQuestion && (
@@ -633,15 +604,13 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                   </div>
                   
                   <div className="space-y-2">
-                    <Textarea
-                      placeholder="Describe your symptoms (e.g., headache, fever, nausea)"
-                      value={currentInput}
-                      onChange={(e) => setCurrentInput(e.target.value)}
-                      className="min-h-[60px] border border-gray-200 focus:border-blue-500 text-xs"
-                    />
+                    <Autocomplete
+                      selectedSymptoms={selectedSymptoms}
+                      onSymptomsChange={setSelectedSymptoms}
+                      />
                     <Button 
-                      onClick={() => processMessage(currentInput, true)} 
-                      disabled={!currentInput.trim()}
+                      onClick={() => processMessage(selectedSymptoms.join(', '), true)} 
+                      disabled={selectedSymptoms.length === 0}
                       className="w-full h-8 text-xs"
                       variant="blueButton"
                     >
