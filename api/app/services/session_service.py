@@ -9,6 +9,7 @@ import json
 from app.utils import unique_symptoms, load_default_disease_data
 from thefuzz import process as fuzzy_process
 from fuzzywuzzy import fuzz
+from app.temp.temp_user import temp_user_manager
 
 class SessionService:
     def __init__(self, interview_service: InterviewService, diagnosis_service: DiagnosisService):
@@ -40,8 +41,43 @@ class SessionService:
         if not unique_symptoms:
             load_default_disease_data()
 
-    def start_session(self, db: Session, email: str = None, user_id: str = None) -> Dict[str, Any]:
+    def start_session(self, db: Session, email: str = None, user_id: str = None, is_temp_user: bool = False) -> Dict[str, Any]:
         session_id = str(uuid4())
+        
+        # Handle temporary users - check for guest emails or explicit temp user flag
+        if is_temp_user or (email and 'guest@medicobud.temp' in email) or (user_id and temp_user_manager.is_temp_user(user_id)):
+            if not user_id:
+                user_id = temp_user_manager.create_temp_user()
+            
+            # Create temporary session in memory
+            temp_user_manager.create_temp_session(session_id, user_id)
+            
+            # Initialize session state for temp users
+            self.sessions[session_id] = {
+                "current_step": "greeting",
+                "person_type": None,
+                "person_details": {},
+                "background_traits": {},
+                "symptoms": [],
+                "timing_intensity": {},
+                "care_medication": {},
+                "interview_session_id": None,
+                "diagnosis_results": None,
+                "asked_questions": {step: [] for step in self.static_questions},
+                "is_temporary": True,
+                "user_id": user_id
+            }
+            
+            first_message = "How are you feeling today?"
+            temp_user_manager.add_message_to_temp_session(session_id, "system", first_message)
+            
+            return {"session_id": session_id, "message": first_message, "temp_user_id": user_id}
+        
+        # Handle regular users (existing logic) - only if we have valid email/user_id
+        if not email and not user_id:
+            # If no email or user_id provided, treat as temp user
+            return self.start_session(db, email=None, user_id=None, is_temp_user=True)
+        
         self.sessions[session_id] = {
             "current_step": "greeting",
             "person_type": None,
@@ -52,26 +88,33 @@ class SessionService:
             "care_medication": {},
             "interview_session_id": None,
             "diagnosis_results": None,
-            "asked_questions": {step: [] for step in self.static_questions}
+            "asked_questions": {step: [] for step in self.static_questions},
+            "is_temporary": False
         }
         first_message = "How are you feeling today?"
         
-        db.execute(
-            text("""INSERT INTO sessions 
-               (session_id, start_time, status, email, user_id) 
-               VALUES (:id, :start, :status, :email, :user_id)"""),
-            {
-                "id": session_id, 
-                "start": datetime.now(), 
-                "status": "in_progress", 
-                "email": email,
-                "user_id": user_id
-            }
-        )
-        
-        db.commit()
-        self._save_message(db, session_id, "system", first_message)
-        db.commit()
+        try:
+            db.execute(
+                text("""INSERT INTO sessions 
+                   (session_id, start_time, status, email, user_id) 
+                   VALUES (:id, :start, :status, :email, :user_id)"""),
+                {
+                    "id": session_id, 
+                    "start": datetime.now(), 
+                    "status": "in_progress", 
+                    "email": email,
+                    "user_id": user_id
+                }
+            )
+            
+            db.commit()
+            self._save_message(db, session_id, "system", first_message)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Error creating database session: {str(e)}")
+            # Fall back to temporary session if database fails
+            return self.start_session(db, email=None, user_id=None, is_temp_user=True)
         
         return {"session_id": session_id, "message": first_message}
 
@@ -83,6 +126,7 @@ class SessionService:
         current_step = state["current_step"]
         user_input_lower = user_input.lower()
         next_message = ""
+        is_temporary = state.get("is_temporary", False)
         
         if current_step == "greeting":
             if any(keyword in user_input_lower for keyword in ["not feeling well", "sick", "ill", "unwell", "start symptom", "analysis"]):
@@ -105,7 +149,7 @@ class SessionService:
                 next_message = self._process_symptom_input(state, user_input)
                 if len(state["symptoms"]) < 3:
                     state["asked_questions"]["symptoms"].append(next_message)
-                    return self._finalize_response(db, session_id, user_input, next_message)
+                    return self._finalize_response(db, session_id, user_input, next_message, is_temporary)
 
             remaining = [q for q in self.static_questions[current_step]
                          if q not in state["asked_questions"][current_step]]
@@ -147,14 +191,14 @@ class SessionService:
                             )
                             next_message = self._format_diagnosis_results(diagnosis_data)
                             state["diagnosis_results"] = diagnosis_data
-                            self._save_summary(db, session_id, state)
+                            self._save_summary(db, session_id, state, is_temporary)
                         except Exception as e:
                             next_message = "I couldn't generate a complete assessment. Please consult a healthcare professional."
                     
                     elif state["current_step"] in self.static_questions:
                         next_message = self.static_questions[state["current_step"]][0]
                         state["asked_questions"][state["current_step"]].append(next_message)
-        
+
         elif current_step == "cross_questioning":
             try:
                 interview_session_id = state["interview_session_id"]
@@ -171,7 +215,7 @@ class SessionService:
                     )
                     next_message = self._format_diagnosis_results(diagnosis_data)
                     state["diagnosis_results"] = diagnosis_data
-                    self._save_summary(db, session_id, state)
+                    self._save_summary(db, session_id, state, is_temporary)
                 else:
                     next_message = next_question
             except Exception as e:
@@ -181,11 +225,7 @@ class SessionService:
         if not next_message:
             next_message = "I'm not sure how to proceed. Let's try a different approach."
         
-        self._save_message(db, session_id, "user", user_input)
-        self._save_message(db, session_id, "system", next_message)
-        db.commit()
-        
-        return {"message": next_message}
+        return self._finalize_response(db, session_id, user_input, next_message, is_temporary)
 
     def _save_message(self, db: Session, session_id: str, sender: str, message_text: str):
         db.execute(
@@ -193,7 +233,19 @@ class SessionService:
             {"id": session_id, "sender": sender, "text": message_text, "time": datetime.now()}
         )
 
-    def _save_summary(self, db: Session, session_id: str, state: Dict):
+    def _save_summary(self, db: Session, session_id: str, state: Dict, is_temporary: bool = False):
+        if is_temporary:
+            # For temporary sessions, update in-memory data
+            summary_data = {
+                "symptoms": state.get("symptoms", []),
+                "background_traits": state.get("background_traits", {}),
+                "diagnosis_results": state.get("diagnosis_results", {}),
+                "status": "completed"
+            }
+            temp_user_manager.update_temp_session(session_id, summary_data)
+            return
+
+        # Existing logic for regular users
         def convert_numpy(obj):
             if isinstance(obj, dict):
                 return {k: convert_numpy(v) for k, v in obj.items()}
@@ -202,7 +254,7 @@ class SessionService:
             elif hasattr(obj, 'item'):
                 return obj.item()        
             return obj
-        
+
         background_traits = convert_numpy(state.get("background_traits", {}))
         care_medication = convert_numpy(state.get("care_medication", {}))
         timing_intensity = convert_numpy(state.get("timing_intensity", {}))
@@ -275,7 +327,6 @@ class SessionService:
                 coverage = d.get("symptom_coverage", 0)
                 
                 severity_icon = "🔴" if severity == "high" else "🟡" if severity == "medium" else "🟢"
-                
                 message += f"   {i}. **{disease}** - {conf:.1f}% confidence {severity_icon}\n"
                 message += f"      └ Symptom match: {coverage}% | Severity: {severity.title()}\n"
             message += "\n"
@@ -401,8 +452,15 @@ class SessionService:
         
         return background_traits
 
-    def _finalize_response(self, db, session_id, user_input, next_message):
-        self._save_message(db, session_id, "user", user_input)
-        self._save_message(db, session_id, "system", next_message)
-        db.commit()
+    def _finalize_response(self, db, session_id, user_input, next_message, is_temporary=False):
+        if is_temporary:
+            # For temporary sessions, save messages to memory
+            temp_user_manager.add_message_to_temp_session(session_id, "user", user_input)
+            temp_user_manager.add_message_to_temp_session(session_id, "system", next_message)
+        else:
+            # For regular sessions, save to database
+            self._save_message(db, session_id, "user", user_input)
+            self._save_message(db, session_id, "system", next_message)
+            db.commit()
+        
         return {"message": next_message}

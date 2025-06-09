@@ -13,6 +13,9 @@ import hmac
 import hashlib
 import json
 import os
+import time
+import threading
+from contextlib import asynccontextmanager
 from typing import Literal, Optional, List
 from .db import engine, Base, get_db
 from .models import UserProfile
@@ -31,11 +34,41 @@ from .api_methods.labReport import router as lab_report_router
 from .api_methods.symptomSession import router as symptom_session_router
 from .routes.chat import router as chat_router
 from fastapi.staticfiles import StaticFiles
+# from .utils.temp_user import temp_user_manager
+from .temp.temp_user import TempUserManager
 
 load_dotenv()
 
-UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")  # Default from .env or code
-ACTUAL_FRONTEND_ORIGIN = "https://medicobud.com"  # The origin shown in browser errors
+# Background task for cleanup
+def cleanup_temp_data():
+    """Background task to clean up expired temporary users and sessions"""
+    while True:
+        try:
+            temp_user_manager.cleanup_expired_data()
+            # Run cleanup every hour
+            time.sleep(3600)
+        except Exception as e:
+            print(f"Error in cleanup task: {e}")
+            time.sleep(3600)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("Starting temporary user cleanup background task...")
+    cleanup_thread = threading.Thread(target=cleanup_temp_data, daemon=True)
+    cleanup_thread.start()
+    print("Temporary user system initialized")
+    
+    yield
+    
+    # Shutdown
+    print("Shutting down temporary user system...")
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
+
+UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")
+ACTUAL_FRONTEND_ORIGIN = "https://medicobud.com"
 
 Base.metadata.create_all(bind=engine)
 
@@ -45,13 +78,13 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # For local UI development
-        "https://localhost:3000",  # For local UI development (https)
-        UI_URL,  # From your .env file (currently http://app.medicobud.com)
-        ACTUAL_FRONTEND_ORIGIN,  # Explicitly add the problematic origin
-        "https://app.medicobud.com",  # If you use this variation
-        "https://medicobud.netlify.app",  # If you also use a Netlify subdomain
-        "*",  # Wildcard for broad compatibility during debugging (consider restricting in full production)
+        "http://localhost:3000",
+        "https://localhost:3000",
+        UI_URL,
+        ACTUAL_FRONTEND_ORIGIN,
+        "https://app.medicobud.com",
+        "https://medicobud.netlify.app",
+        "*",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -66,10 +99,9 @@ app.add_middleware(
         "svix-id",
         "svix-timestamp",
         "svix-signature",
-        # Add any other custom headers your frontend might send
     ],
     expose_headers=["Content-Type", "Authorization"],
-    max_age=86400,  # Cache preflight requests for 24 hours
+    max_age=86400,
 )
 
 diseases_dict = load_disease_data("dataset.csv")
@@ -84,7 +116,6 @@ app.include_router(symptom_session_router)
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
 
 @app.get("/")
 def root():

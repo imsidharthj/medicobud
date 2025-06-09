@@ -30,6 +30,7 @@ router = APIRouter()
 class SessionStartRequest(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
+    is_temp_user: Optional[bool] = False
 
 # Existing Models (unchanged)
 class IdentificationRequest(BaseModel):
@@ -197,14 +198,22 @@ async def start_session(
     except Exception as e:
         print(f"Error parsing request body: {str(e)}")
     
-    if request.email:
+    # Check if this should be a temporary user session
+    is_temp_user = request.is_temp_user or (not request.email and not request.user_id)
+    
+    if request.email and not is_temp_user:
         try:
             db.query(UserProfile).filter(UserProfile.email == request.email).first()
         except Exception as db_error:
             print(f"Database error looking up user: {str(db_error)}")
         
     try:
-        result = session_service.start_session(db, request.email, request.user_id)
+        result = session_service.start_session(
+            db, 
+            email=request.email, 
+            user_id=request.user_id, 
+            is_temp_user=is_temp_user
+        )
         return result
     except Exception as e:
         print(f"ERROR creating session: {str(e)}")
@@ -224,10 +233,22 @@ async def send_message(input: MessageInput, db: Session = Depends(get_db)):
 @router.get("/sessions")
 async def list_sessions(
     email: Optional[str] = None,
+    temp_user_id: Optional[str] = None,
     skip: int = 0, 
     limit: int = 20, 
     db: Session = Depends(get_db)
 ):
+    from app.temp.temp_user import temp_user_manager
+    
+    # Handle temporary user sessions
+    if temp_user_id and temp_user_manager.is_temp_user(temp_user_id):
+        sessions = temp_user_manager.get_temp_user_sessions(temp_user_id)
+        # Apply pagination
+        start_idx = skip
+        end_idx = skip + limit
+        return sessions[start_idx:end_idx]
+    
+    # Handle regular user sessions
     query = "SELECT session_id, start_time, email, status FROM sessions"
     params = {}
     
@@ -248,7 +269,8 @@ async def list_sessions(
             "session_id": s[0], 
             "start_time": s[1],
             "email": s[2],
-            "status": s[3]
+            "status": s[3],
+            "is_temporary": False
         } for s in sessions
     ]
 
@@ -256,8 +278,43 @@ async def list_sessions(
 async def get_session(
     session_id: str, 
     email: Optional[str] = None,
+    temp_user_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    from app.temp.temp_user import temp_user_manager
+    
+    # Check if this is a temporary session
+    temp_session = temp_user_manager.get_temp_session(session_id)
+    if temp_session:
+        # Verify access rights for temp user
+        if temp_user_id and temp_session.get("user_id") != temp_user_id:
+            raise HTTPException(status_code=403, detail="Access denied to this temporary session")
+        
+        return {
+            "session_info": {
+                "session_id": temp_session["session_id"],
+                "start_time": temp_session["created_at"].isoformat(),
+                "end_time": None,
+                "status": temp_session.get("status", "in_progress"),
+                "person_type": None,
+                "person_details": None
+            },
+            "user": {
+                "email": None,
+                "user_id": temp_session.get("user_id"),
+                "first_name": None,
+                "last_name": None,
+                "is_temporary": True
+            },
+            "messages": temp_session.get("messages", []),
+            "summary": {
+                "symptoms": temp_session.get("symptoms", []),
+                "background_traits": temp_session.get("background_traits", {}),
+                "diagnosis_results": temp_session.get("diagnosis_results", {})
+            }
+        }
+    
+    # Handle regular database sessions
     query = """SELECT s.session_id, s.start_time, s.end_time, s.status, 
                 s.person_type, s.person_details, s.email, s.user_id,
                 u.first_name, u.last_name
@@ -292,7 +349,8 @@ async def get_session(
             "email": session_data[6],
             "user_id": session_data[7],
             "first_name": session_data[8],
-            "last_name": session_data[9]
+            "last_name": session_data[9],
+            "is_temporary": False
         }
     
     return {
@@ -312,3 +370,34 @@ async def get_session(
             "diagnosis_results": summary[2] if summary else {}
         }
     }
+
+# New endpoint for temporary user management
+@router.post("/temp-user/create")
+async def create_temp_user():
+    """Create a new temporary user"""
+    from app.temp.temp_user import temp_user_manager
+    
+    temp_user_id = temp_user_manager.create_temp_user()
+    return {
+        "temp_user_id": temp_user_id,
+        "message": "Temporary user created successfully"
+    }
+
+@router.delete("/temp-user/{temp_user_id}")
+async def clear_temp_user(temp_user_id: str):
+    """Clear all data for a temporary user"""
+    from app.temp.temp_user import temp_user_manager
+    
+    if not temp_user_manager.is_temp_user(temp_user_id):
+        raise HTTPException(status_code=404, detail="Temporary user not found")
+    
+    temp_user_manager.clear_temp_user_data(temp_user_id)
+    return {"message": "Temporary user data cleared successfully"}
+
+@router.get("/temp-stats")
+async def get_temp_stats():
+    """Get statistics about temporary users and sessions"""
+    from app.temp.temp_user import temp_user_manager
+    
+    stats = temp_user_manager.get_session_count()
+    return stats
