@@ -6,7 +6,7 @@ Integrates OCR, MedCat, Prompting, and LLM components for comprehensive lab repo
 import os
 import sys
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 # Local module imports
@@ -27,10 +27,10 @@ class LabReportAnalyzer:
     Features: GPU/CPU optimization, comprehensive error handling, medical-grade accuracy
     """
     
-    def __init__(self, openai_api_key: str = None):
+    def __init__(self, litellm_api_key: str = None):
         """Initialize the complete lab report analysis system"""
         # Use environment variable if no API key is provided
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self.litellm_api_key = litellm_api_key or os.getenv("LITELLM_API_KEY")
         
         # Initialize system capabilities and components
         logger.info("Initializing Lab Report Analysis System...")
@@ -44,13 +44,13 @@ class LabReportAnalyzer:
         self.prompt_manager = PromptManager()
         
         # Only initialize LLM components if API key is available
-        if self.openai_api_key and self.openai_api_key != "your-openai-api-key-here":
-            self.llm_client = MedicalLLMClient(self.openai_api_key)
-            self.analyzer = LLMAnalyzer(self.openai_api_key)
+        if self.litellm_api_key and self.litellm_api_key != "your-litellm-api-key-here":
+            self.llm_client = MedicalLLMClient(self.litellm_api_key)
+            self.analyzer = LLMAnalyzer(self.litellm_api_key)
         else:
             self.llm_client = None
             self.analyzer = None
-            logger.warning("OpenAI API key not provided - LLM analysis will be unavailable")
+            logger.warning("LiteLLM API key not provided - LLM analysis will be unavailable")
         
         logger.info(f"✅ Lab Report Analyzer initialized successfully!")
         logger.info(f"🖥️  Processing device: {self.system_caps.device.upper()}")
@@ -73,7 +73,7 @@ class LabReportAnalyzer:
             if not self.analyzer:
                 return {
                     "success": False,
-                    "error": "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or provide API key during initialization.",
+                    "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
                     "file_path": file_path,
                     "processing_time": (datetime.now() - start_time).total_seconds()
                 }
@@ -142,7 +142,7 @@ class LabReportAnalyzer:
         if not self.analyzer:
             return {
                 "success": False,
-                "error": "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or provide API key during initialization.",
+                "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
                 "processing_time": 0
             }
         
@@ -175,9 +175,7 @@ class LabReportAnalyzer:
             # Add medication interaction analysis
             if patient_medications:
                 logger.info("💊 Analyzing medication interactions...")
-                medication_analysis = self.llm_client.analyze_medication_interactions(
-                    result, patient_medications
-                )
+                medication_analysis = self.analyze_with_medications(result, patient_medications)
                 result["medication_analysis"] = medication_analysis
             
             # Add trend analysis
@@ -253,7 +251,8 @@ class LabReportAnalyzer:
             "optimal_batch_size": self.system_caps.get_optimal_batch_size(),
             "models_loaded": {
                 "spacy": self.entity_extractor.nlp is not None,
-                "biomedical_ner": self.entity_extractor.biomedical_ner is not None,  # Fixed: use biomedical_ner instead of medcat
+                "biomedical_ner": self.entity_extractor.biomedical_ner is not None,  # Primary
+                "medcat": self.entity_extractor.medcat is not None,  # Conditional
                 "llm_model": self.analyzer is not None
             }
         }
@@ -267,15 +266,19 @@ class LabReportAnalyzer:
             },
             "nlp_info": {
                 "spacy_available": self.entity_extractor.nlp is not None,
-                "biomedical_ner_available": self.entity_extractor.biomedical_ner is not None,  # Fixed: use biomedical_ner instead of medcat
-                "device_used": self.system_caps.device
+                "biomedical_ner_available": self.entity_extractor.biomedical_ner is not None,
+                "medcat_available": self.entity_extractor.medcat is not None,
+                "medcat_lazy_loading": (self.entity_extractor.medcat is None and 
+                                      hasattr(self.entity_extractor, '_lazy_load_medcat_if_needed')),
+                "device_used": self.system_caps.device,
+                "model_strategy": "biomedical_ner_primary_medcat_conditional"
             },
             "llm_info": {
                 "model": self.llm_client.model if self.llm_client else None,
-                "api_configured": bool(self.openai_api_key and self.openai_api_key != "your-openai-api-key-here")
+                "api_configured": bool(self.litellm_api_key and self.litellm_api_key != "your-litellm-api-key-here")
             }
         }
-    
+
     def validate_setup(self) -> Dict[str, Any]:
         """Validate system setup and configuration"""
         validation = {
@@ -290,10 +293,15 @@ class LabReportAnalyzer:
             validation["warnings"].append("OCR.space API key not configured - only Tesseract will be used")
             validation["recommendations"].append("Set OCR_SPACE_API_KEY environment variable for better OCR fallback")
         
-        # Check MedCat setup
-        if not self.entity_extractor.medcat:
-            validation["warnings"].append("MedCat model not available - using regex fallback for medical entities")
-            validation["recommendations"].append("Download MedCat model for better medical entity extraction")
+        # Check Biomedical NER setup (PRIMARY)
+        if not self.entity_extractor.biomedical_ner:
+            validation["warnings"].append("Biomedical NER model not available - MedCAT will be used as primary")
+            validation["recommendations"].append("Biomedical NER provides better medical entity extraction")
+        
+        # Check MedCAT setup (CONDITIONAL)
+        if not self.entity_extractor.medcat and not hasattr(self.entity_extractor, '_lazy_load_medcat_if_needed'):
+            validation["warnings"].append("MedCAT not available for fallback - using regex only")
+            validation["recommendations"].append("MedCAT provides better fallback for insufficient results")
         
         # Check spaCy setup
         if not self.entity_extractor.nlp:
@@ -301,15 +309,23 @@ class LabReportAnalyzer:
             validation["recommendations"].append("Install spaCy model: python -m spacy download en_core_web_sm")
         
         # Check LLM setup
-        if not self.openai_api_key or self.openai_api_key == "your-openai-api-key-here":
-            validation["issues"].append("OpenAI API key not configured")
-            validation["recommendations"].append("Set OPENAI_API_KEY environment variable")
+        if not self.litellm_api_key or self.litellm_api_key == "your-litellm-api-key-here":
+            validation["issues"].append("LiteLLM API key not configured")
+            validation["recommendations"].append("Set LITELLM_API_KEY environment variable")
             validation["overall_status"] = "❌ Configuration Issues"
         
         # Check GPU setup
         if not self.system_caps.has_gpu:
             validation["warnings"].append("No GPU detected - using CPU processing (slower)")
             validation["recommendations"].append("Consider GPU setup for faster processing")
+        
+        # Model strategy status
+        if self.entity_extractor.biomedical_ner:
+            validation["recommendations"].append("✅ Optimal setup: Biomedical NER (primary) + MedCAT (conditional fallback)")
+        elif self.entity_extractor.medcat:
+            validation["warnings"].append("Suboptimal: MedCAT as primary (Biomedical NER preferred)")
+        else:
+            validation["warnings"].append("Basic setup: Regex-only extraction (install medical models)")
         
         if validation["issues"]:
             validation["overall_status"] = "❌ Configuration Issues"
@@ -328,22 +344,42 @@ class LabReportAnalyzer:
             return "Tesseract + OCR.space fallback"
         else:
             return "Tesseract only"
+    
+    def analyze_with_medications(self, analysis_result: Dict[str, Any], medications: List[str]) -> str:
+        """
+        Analyze medication interactions with lab results
+        
+        Args:
+            analysis_result: Lab analysis results
+            medications: List of current medications
+            
+        Returns:
+            Medication interaction analysis string
+        """
+        if not self.llm_client:
+            return "Medication analysis unavailable - OpenAI API key not configured"
+        
+        try:
+            return self.llm_client.analyze_medication_interactions(analysis_result, medications)
+        except Exception as e:
+            logger.error(f"Medication analysis failed: {e}")
+            return f"Medication analysis failed: {str(e)}"
 
 # Convenience function for quick analysis
-def analyze_lab_report(file_path: str, openai_api_key: str = None) -> Dict[str, Any]:
+def analyze_lab_report(file_path: str, litellm_api_key: str = None) -> Dict[str, Any]:
     """
     Convenience function for quick lab report analysis
     
     Args:
         file_path: Path to lab report file
-        openai_api_key: OpenAI API key (or set OPENAI_API_KEY env var)
+        litellm_api_key: LiteLLM API key (or set LITELLM_API_KEY env var)
         
     Returns:
         Analysis results
     """
-    api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+    api_key = litellm_api_key or os.getenv("LITELLM_API_KEY")
     if not api_key:
-        raise ValueError("OpenAI API key required. Set OPENAI_API_KEY environment variable or pass as parameter.")
+        raise ValueError("LiteLLM API key required. Set LITELLM_API_KEY environment variable or pass as parameter.")
     
     analyzer = LabReportAnalyzer(api_key)
     return analyzer.analyze_lab_report(file_path)
@@ -351,11 +387,11 @@ def analyze_lab_report(file_path: str, openai_api_key: str = None) -> Dict[str, 
 # Main execution for testing
 if __name__ == "__main__":
     # Get API key from environment
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("LITELLM_API_KEY")
     
     if not api_key:
-        print("⚠️  Please set your OPENAI_API_KEY environment variable")
-        print("   export OPENAI_API_KEY='your-api-key-here'")
+        print("⚠️  Please set your LITELLM_API_KEY environment variable")
+        print("   export LITELLM_API_KEY='your-api-key-here'")
         sys.exit(1)
     
     # Initialize analyzer
