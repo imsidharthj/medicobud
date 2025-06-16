@@ -93,24 +93,24 @@ def get_analyzer(api_key: str = None) -> LabReportAnalyzer:
     global _analyzer_instance
     
     # Use provided API key or get from environment
-    openai_api_key = api_key or os.getenv("OPENAI_API_KEY")
+    litellm_api_key = api_key or os.getenv("LITELLM_API_KEY")
     
-    if not openai_api_key:
+    if not litellm_api_key:
         # Check if DeepSeek is available as alternative
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
         if deepseek_key:
-            logger.warning("OpenAI API key not found, but DeepSeek fallback is available")
-            # Use a placeholder for OpenAI key since DeepSeek will be used as fallback
-            openai_api_key = "placeholder-for-deepseek-fallback"
+            logger.warning("LiteLLM API key not found, but DeepSeek fallback is available")
+            # Use a placeholder for LiteLLM key since DeepSeek will be used as fallback
+            litellm_api_key = "placeholder-for-deepseek-fallback"
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No AI API keys configured. Please set OPENAI_API_KEY or DEEPSEEK_API_KEY environment variable."
+                detail="No AI API keys configured. Please set LITELLM_API_KEY or DEEPSEEK_API_KEY environment variable."
             )
     
     if _analyzer_instance is None:
-        logger.info("Initializing Lab Report Analyzer with fallback support...")
-        _analyzer_instance = LabReportAnalyzer(openai_api_key)
+        logger.info("Initializing Lab Report Analyzer with LiteLLM + DeepSeek fallback support...")
+        _analyzer_instance = LabReportAnalyzer(litellm_api_key)
         
         # Get system status - using correct method name
         try:
@@ -229,7 +229,7 @@ async def analyze_lab_report_file(
     medications: Optional[str] = Form(None),  # JSON string of medications
     file: UploadFile = File(...)
 ):
-    """Analyze lab report from uploaded file - Uses environment OPENAI_API_KEY"""
+    """Analyze lab report from uploaded file - Uses environment LITELLM_API_KEY"""
     
     # Validate file format
     if not file.filename:
@@ -250,7 +250,7 @@ async def analyze_lab_report_file(
     file_path = await save_upload_file(file)
     
     try:
-        # Initialize analyzer (uses environment OPENAI_API_KEY)
+        # Initialize analyzer (uses environment LITELLM_API_KEY)
         analyzer = get_analyzer()
         
         # Parse medications if provided
@@ -355,13 +355,13 @@ async def analyze_lab_text(
 
 @router.get("/system/status", response_model=SystemStatusResponse)
 async def get_system_status():
-    """Get comprehensive system status for lab analysis including LLM fallback"""
+    """Get comprehensive system status for lab analysis including model strategy"""
     try:
         # Check if we have any API keys available
-        openai_key = os.getenv("OPENAI_API_KEY")
+        litellm_key = os.getenv("LITELLM_API_KEY")
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
         
-        if not openai_key and not deepseek_key:
+        if not litellm_key and not deepseek_key:
             return SystemStatusResponse(
                 status="❌ No API Keys",
                 gpu_available=False,
@@ -370,48 +370,63 @@ async def get_system_status():
                 medcat_available=False,
                 spacy_available=False,
                 models_loaded={},
-                recommendations=["Set OPENAI_API_KEY or DEEPSEEK_API_KEY environment variable"]
+                recommendations=["Set LITELLM_API_KEY or DEEPSEEK_API_KEY environment variable"]
             )
         
         # Initialize analyzer with available key
-        test_key = openai_key or "placeholder-for-deepseek-fallback"
+        test_key = litellm_key or "placeholder-for-deepseek-fallback"
         temp_analyzer = LabReportAnalyzer(test_key)
-        system_status = temp_analyzer.get_system_status()  # Fixed method name
+        system_status = temp_analyzer.get_system_status()
         
         # Extract system info from the correct structure
         system_info = system_status.get('system_info', {})
         ocr_info = system_status.get('ocr_info', {})
         nlp_info = system_status.get('nlp_info', {})
         
-        primary_available = bool(openai_key)
+        primary_available = bool(litellm_key)
         fallback_available = bool(deepseek_key)
         
-        # Determine overall status
+        # Determine overall status with model strategy
+        biomedical_ner_available = nlp_info.get('biomedical_ner_available', False)
+        medcat_available = nlp_info.get('medcat_available', False)
+        medcat_lazy_loading = nlp_info.get('medcat_lazy_loading', False)
+        
         if primary_available and fallback_available:
-            status = "✅ Ready (Primary + Fallback)"
+            if biomedical_ner_available:
+                status = "✅ Optimal (BioBERT + MedCAT conditional + LLM fallback)"
+            elif medcat_available:
+                status = "⚠️ Good (MedCAT primary + LLM fallback)"
+            else:
+                status = "⚠️ Basic (Regex + LLM fallback)"
         elif primary_available or fallback_available:
-            status = "⚠️ Ready (Limited)"
+            status = "⚠️ Ready (Limited LLM)"
         else:
             status = "❌ LLM Unavailable"
         
         recommendations = []
         if not primary_available:
-            recommendations.append("Set OPENAI_API_KEY for primary LLM")
+            recommendations.append("Set LITELLM_API_KEY for primary LLM (openai/gpt-4.1-mini)")
         if not fallback_available:
             recommendations.append("Set DEEPSEEK_API_KEY for fallback reliability")
         if not ocr_info.get('ocr_space_configured', False):
             recommendations.append("Set OCR_SPACE_API_KEY for better OCR fallback")
+        if not biomedical_ner_available:
+            recommendations.append("Biomedical NER model will be downloaded on first use for optimal results")
+        if not medcat_available and not medcat_lazy_loading:
+            recommendations.append("MedCAT model not available for fallback")
         
         return SystemStatusResponse(
             status=status,
             gpu_available=system_info.get("gpu_available", False),
             device=system_info.get("device", "unknown"),
             ocr_configured=ocr_info.get("ocr_space_configured", False),
-            medcat_available=nlp_info.get("medcat_available", False),
+            medcat_available=medcat_available or medcat_lazy_loading,
             spacy_available=nlp_info.get("spacy_available", False),
             models_loaded={
                 "spacy": nlp_info.get("spacy_available", False),
-                "medcat": nlp_info.get("medcat_available", False),
+                "biomedical_ner": biomedical_ner_available,
+                "medcat": medcat_available,
+                "medcat_lazy_loading": medcat_lazy_loading,
                 "primary_llm": primary_available,
                 "fallback_llm": fallback_available
             },
@@ -445,7 +460,8 @@ async def check_analysis_system():
             "gpu_memory_gb": caps.gpu_memory,
             "optimal_batch_size": caps.get_optimal_batch_size(),
             "environment_variables": {
-                "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
+                "litellm_api_key_set": bool(os.getenv("LITELLM_API_KEY")),
+                "deepseek_api_key_set": bool(os.getenv("DEEPSEEK_API_KEY")),
                 "ocr_space_api_key_set": bool(os.getenv("OCR_SPACE_API_KEY")),
                 "medcat_model_path_set": bool(os.getenv("MEDCAT_MODEL_PATH"))
             },
