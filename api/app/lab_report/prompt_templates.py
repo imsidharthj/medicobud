@@ -10,184 +10,100 @@ from langchain_core.prompts import ChatPromptTemplate
 class MedicalPromptTemplates:
     """Medical-specific prompt templates for LLM analysis"""
     
-    # Main lab analysis template
-    LAB_ANALYSIS_TEMPLATE = """You are MedicoBud, a specialized medical AI assistant for laboratory report analysis.
+    # Token-optimized lab analysis template with comprehensive response format
+    LAB_ANALYSIS_TEMPLATE = """You are MedicoBud, a medical AI for lab report analysis.
 
-**IMPORTANT MEDICAL DISCLAIMER**: This analysis is for informational purposes only and should NOT replace professional medical consultation, diagnosis, or treatment.
+## INTERNAL PROCESSING INSTRUCTIONS (DO NOT OUTPUT THESE STEPS):
 
-## Lab Report Data Analysis
+1. **DATA TYPE RECOGNITION**:
+Below is a raw blob of text. First, tell me in one sentence what kind of data this is (e.g. "OCR'ed CBC table with test names, values, units, and reference ranges, chemisty panel, etc").
 
-**Raw Extracted Text**: 
-{lab_text}
+2. **INTERPRETATION INSTRUCTIONS**:
+You will then parse every lab test, value, unit, and reference range—even though formatting is noisy.  
+- Test names may be in ALL-CAPS or abbreviated.  
+- Whenever you see a test name (ALL-CAPS or common abbreviation), start a new entry—even if on the same line.
+- Unique tests: Treat each distinct test label (e.g. "Basophils" vs. "Absolute Basophil Count" or "MCV" vs. "MCH") as its own item.
+- Identify all test names and numeric values. Values may be followed by units such as: g/dL, ×10³/µL, ×10⁹/L, million/µL, fL, pg, %, mg/dL, IU/L, mmol/L, mEq/L, minutes (min), seconds (s).
+- Reference ranges follow each value.
+- Rows may be concatenated; separate them.
 
-**Medical Entities Detected**: 
-{medical_entities}
+3. **ANALYSIS - CRITICAL REQUIREMENT**:
+- You MUST analyze EVERY SINGLE parsed value from INTERPRETATION. Do not skip, omit, or exclude ANY test value.
+- For each test you parsed in INTERPRETATION, you MUST include it in the VALUES section in REQUIRED FORMAT.
+- If you detect any likely parsing or OCR errors, exclude that value from analyse, and mention it in the SUMMARY as INTERPRETATION error in parentheses().
+- Your job is to tell the user whether ALL their lab values are normal or need medical attention.
 
-**Lab Values Identified**: 
-{lab_values}
+## Data:
+Text: {lab_text}
+Entities: {medical_entities}
+Values: {lab_values}
+Analysis: {lab_analysis}
 
-**Additional Quantities Found**: 
-{quantities}
+## INSTRUCTIONS:
+- Carefully extract ALL laboratory test names, their corresponding measured values, units, and reference ranges from the text provided, even if the text is unstructured or noisy.
+- Pay attention to any numeric values directly following test names.
+- If abnormality markers like "L" (Low), "H" (High), or other flags appear after values, include them when determining status.
+- If multiple values are combined on one line, separate them into individual tests.
+- If reference ranges are present after values, capture them accurately.
+- Ignore any random, non-medical text or OCR noise.
+- Use your full reasoning capability to deduce the correct values even if formatting is inconsistent.
+- Do not skip any values present in the text.
 
-**Lab Values Analysis**:
-{lab_analysis}
+## REQUIRED FORMAT (use EXACTLY this structure):
 
-## Please provide a comprehensive medical analysis with the following sections:
+**SUMMARY:** [1-2 sentences max]
 
-### 1. TEST RESULTS SUMMARY
-- List all identified laboratory tests with their values and units
-- Identify reference ranges where mentioned in the report
-- Note any missing, unclear, or potentially misread values
-- Highlight data quality issues if any
+**VALUES:**
+[Test]: [Value] ([Range]) [Status] | [Test]: [Value] ([Range]) [Status]
+[CONTINUE FOR ALL PARSED VALUES - DO NOT LIMIT TO 8 TESTS]
 
-### 2. ABNORMAL FINDINGS ASSESSMENT
-- Flag any values that appear outside typical normal ranges
-- Classify deviations as: **MILD**, **MODERATE**, or **SEVERE**
-- Highlight any **CRITICAL** values requiring immediate medical attention
-- Consider age, gender, and other factors that might affect normal ranges
+**STATUS:** Normal: X | Abnormal: Y | Critical: Z
 
-### 3. CLINICAL SIGNIFICANCE & INTERPRETATION
-- Explain what abnormal values might indicate medically
-- Discuss potential correlations between different test results
-- Note any patterns that might suggest specific conditions or syndromes
-- Explain the clinical relevance of each finding
+**RECOMMENDATIONS:**
+🏃 Lifestyle: [2-3 specific actions]
+🔬 Follow-up: [timing and tests]
+👨‍⚕️ Doctor: [urgency and discussion points]
 
-### 4. HEALTH IMPLICATIONS
-- Describe potential health implications in clear, patient-friendly language
-- Explain why certain values are important for health monitoring
-- Discuss how lifestyle factors might influence these results
-- Address any potential concerns or reassuring findings
+## Rules:
+1. **SUMMARY**: Max 2 sentences, key findings only
+2. **VALUES**: Pipe-separated format, INCLUDE ALL TESTS FROM INTERPRETATION, use emojis:
+   - ✅ NORMAL | ⚠️ HIGH/LOW | 🚨 CRITICAL
+3. **STATUS**: Count accurately from ALL values in VALUES section
+4. **RECOMMENDATIONS**: Max 2 bullet points per section
+5. Units: Use mg/dL, g/dL, K/uL, mEq/L (standardized)
+6. Critical thresholds: Glucose <50/>400, Hemoglobin <7/>20, WBC <1/>50, Platelets <20/>1000, K+ <2.5/>6.0, Na+ <120/>160
+7. **MANDATORY**: Every test parsed in INTERPRETATION MUST appear in the VALUES section
 
-### 5. RECOMMENDATIONS & NEXT STEPS
-- Suggest appropriate follow-up actions (retesting, specialist consultation)
-- Recommend lifestyle modifications if applicable
-- Indicate urgency level for medical consultation (routine, urgent, immediate)
-- Suggest additional tests that might be helpful
+**Language**: Patient-friendly, avoid diagnosis terms, use "may suggest" not "indicates"."""
 
-### 6. IMPORTANT LIMITATIONS & DISCLAIMERS
-- Emphasize that this AI analysis cannot replace professional medical expertise
-- Note any limitations in the analysis due to incomplete or unclear data
-- Stress the importance of consulting with healthcare professionals
-- Mention that individual patient context is crucial for proper interpretation
+    # Compact trend analysis template  
+    TREND_ANALYSIS_TEMPLATE = """**TREND ANALYSIS:**
 
-**Response Guidelines:**
-- Use clear, patient-friendly language while maintaining medical accuracy
-- Include specific numerical values and units when discussing results
-- Avoid definitive diagnoses - use terms like "may indicate", "could suggest", "might be associated with"
-- Always emphasize the importance of professional medical interpretation
-- Be thorough but not alarming - balance accuracy with appropriate concern level
-"""
+Current: {current_results}
+Previous: {previous_results}
+Period: {time_period}
 
-    # Critical values assessment template
-    CRITICAL_VALUES_TEMPLATE = """You are MedicoBud's emergency assessment module. Your role is to identify CRITICAL LAB VALUES that require immediate medical attention.
+**FORMAT:**
+**CHANGES:** [Test]: [Direction] [Rate] | [Test]: [Direction] [Rate]
+**PATTERNS:** [Key observations]
+**MONITORING:** [Frequency recommendations]
 
-**Lab Data for Critical Assessment**: 
-{lab_data}
+**Rules:** Use ↑↓→ arrows, keep concise."""
 
-**CRITICAL VALUE RANGES TO ASSESS:**
+    # Compact medication interaction template
+    MEDICATION_INTERACTION_TEMPLATE = """**MEDICATION ANALYSIS:**
 
-**Immediately Life-Threatening Ranges:**
-- **Glucose**: <50 or >400 mg/dL
-- **Hemoglobin**: <7 or >20 g/dL  
-- **Platelets**: <20,000 or >1,000,000 /μL
-- **Creatinine**: >5.0 mg/dL
-- **Potassium**: <2.5 or >6.0 mEq/L
-- **Sodium**: <125 or >155 mEq/L
-- **WBC**: <1.0 or >50.0 K/uL
-- **Calcium**: <7.0 or >12.0 mg/dL
-- **pH**: <7.20 or >7.60 (if available)
+Labs: {lab_results}
+Meds: {medications}
 
-**For EACH CRITICAL finding identified:**
+**FORMAT:**
+**EFFECTS:** [Med]: affects [Test] | [Med]: affects [Test] 
+**MONITORING:** [Tests to watch]
+**TIMING:** [Lab timing recommendations]
 
-🚨 **CRITICAL ALERT: [Test Name]**
-1. **Value Found**: [Exact value with units]
-2. **Normal Range**: [Standard reference range]
-3. **Why This Is Life-Threatening**: [Medical explanation of immediate danger]
-4. **Immediate Action Required**: 
-   - Emergency Room visit IMMEDIATELY
-   - Call 911 if symptoms present
-   - Do not delay medical care
-5. **Potential Consequences if Untreated**: [Serious complications that could occur]
-6. **Symptoms to Watch For**: [Warning signs patient should monitor]
-
-**If NO critical values are identified:**
-✅ **No immediately life-threatening values identified in this analysis.**
-
-**IMPORTANT EMERGENCY PROTOCOLS:**
-- ANY critical value requires IMMEDIATE medical attention
-- Do not wait for symptoms to appear
-- This is a medical emergency screening tool
-- When in doubt, seek immediate medical care
-- Critical values can be fatal if not treated promptly
-
-**Remember**: This assessment is for emergency screening only. Professional medical evaluation is essential for any concerning lab results.
-"""
-
-    # Trend analysis template
-    TREND_ANALYSIS_TEMPLATE = """You are MedicoBud's trend analysis specialist. Analyze changes in lab values over time to identify patterns and trends.
-
-**Current Lab Results**:
-{current_results}
-
-**Previous Lab Results** (if available):
-{previous_results}
-
-**Time Period**: {time_period}
-
-## Trend Analysis Report:
-
-### 1. VALUE CHANGES OVER TIME
-For each lab test, identify:
-- Direction of change (improving, worsening, stable)
-- Rate of change (rapid, gradual, minimal)
-- Clinical significance of the trend
-
-### 2. PATTERN RECOGNITION
-- Identify any concerning patterns
-- Note improvements in health markers
-- Highlight values moving toward or away from normal ranges
-
-### 3. TREND INTERPRETATION
-- Explain what these trends might indicate about health status
-- Discuss whether trends suggest treatment effectiveness
-- Note any cyclical or seasonal patterns if applicable
-
-### 4. MONITORING RECOMMENDATIONS
-- Suggest optimal frequency for retesting
-- Identify which values need closer monitoring
-- Recommend when to seek medical review based on trends
-
-If no previous results available, respond: "No previous lab results provided for trend analysis. Single-point analysis completed instead."
-"""
-
-    # Medication interaction template
-    MEDICATION_INTERACTION_TEMPLATE = """You are MedicoBud's medication interaction specialist. Analyze how medications might affect lab results.
-
-**Lab Results**:
-{lab_results}
-
-**Current Medications** (if provided):
-{medications}
-
-**Analysis Focus:**
-
-### 1. MEDICATION EFFECTS ON LAB VALUES
-- Identify which medications could influence specific lab results
-- Explain expected vs. unexpected changes due to medications
-- Note any values that might be medication-related
-
-### 2. DRUG-LAB INTERACTIONS
-- Highlight potential medication-induced changes
-- Distinguish between therapeutic effects and side effects
-- Note any values requiring medication adjustment
-
-### 3. MONITORING RECOMMENDATIONS
-- Suggest which lab values need frequent monitoring due to medications
-- Identify early warning signs of medication toxicity
-- Recommend timing of lab draws relative to medication doses
-
-If no medications provided, focus only on general lab interpretation without medication context.
-"""
+**Rules:** Focus on clinically significant interactions only."""
+    
+    # Removed CRITICAL_VALUES_TEMPLATE as it's now integrated
 
 class PromptManager:
     """Manages prompt templates and provides formatted prompts"""
@@ -197,18 +113,14 @@ class PromptManager:
     
     def get_lab_analysis_prompt(self, lab_data: Dict[str, Any]) -> ChatPromptTemplate:
         """Get formatted lab analysis prompt"""
+        # The prompt will now implicitly handle critical values
         prompt = ChatPromptTemplate.from_template(
             self.templates.LAB_ANALYSIS_TEMPLATE
         )
         return prompt
     
-    def get_critical_values_prompt(self, lab_data: Dict[str, Any]) -> ChatPromptTemplate:
-        """Get formatted critical values assessment prompt"""
-        prompt = ChatPromptTemplate.from_template(
-            self.templates.CRITICAL_VALUES_TEMPLATE
-        )
-        return prompt
-    
+    # Removed get_critical_values_prompt as it's no longer needed
+
     def get_trend_analysis_prompt(self, current_results: Dict[str, Any], 
                                  previous_results: Dict[str, Any] = None,
                                  time_period: str = "Not specified") -> ChatPromptTemplate:
@@ -237,62 +149,60 @@ class PromptManager:
         }
     
     def _format_entities(self, entities: List[Dict[str, Any]]) -> str:
-        """Format medical entities for prompt display"""
+        """Format medical entities for prompt display - compact version"""
         if not entities:
-            return "No medical entities detected"
+            return "None"
+        
+        # Group by category for more compact display
+        categories = {}
+        for entity in entities[:10]:  # Reduced from 20 to 10
+            category = entity.get('category', 'Other')
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(entity.get('text', 'N/A'))
         
         formatted = []
-        for entity in entities[:20]:  # Limit to first 20 entities
-            confidence = entity.get('confidence', 0)
-            formatted.append(f"- {entity.get('text', 'N/A')} ({entity.get('category', 'Unknown')}) [Confidence: {confidence:.2f}]")
+        for category, texts in categories.items():
+            formatted.append(f"{category}: {', '.join(texts[:3])}")  # Max 3 per category
         
-        return "\n".join(formatted)
+        return " | ".join(formatted)
     
     def _format_lab_values(self, lab_values: Dict[str, Any]) -> str:
-        """Format lab values for prompt display"""
+        """Format lab values for prompt display - compact version"""
         if not lab_values:
-            return "No lab values detected"
+            return "None"
         
         formatted = []
-        for test_name, values in lab_values.items():
+        for test_name, values in list(lab_values.items()):  # Max 8 tests
             if isinstance(values, list) and values:
-                for value, unit in values:
-                    formatted.append(f"- {test_name.title()}: {value} {unit}")
+                value, unit = values[0]  # Take first value only
+                formatted.append(f"{test_name}: {value} {unit}")
             else:
-                formatted.append(f"- {test_name.title()}: {values}")
+                formatted.append(f"{test_name}: {values}")
         
-        return "\n".join(formatted)
+        return " | ".join(formatted)
     
     def _format_lab_analysis(self, lab_analysis: Dict[str, Any]) -> str:
-        """Format lab analysis results for prompt display"""
+        """Format lab analysis results for prompt display - compact version"""
         if not lab_analysis:
-            return "No lab analysis available"
+            return "None"
         
-        formatted = []
+        # Count totals for compact display
+        normal_count = len(lab_analysis.get("normal_values", []))
+        abnormal_count = len(lab_analysis.get("abnormal_values", []))
+        critical_count = len(lab_analysis.get("critical_values", []))
         
-        # Normal values
-        normal = lab_analysis.get("normal_values", [])
-        if normal:
-            formatted.append(f"**Normal Values ({len(normal)}):**")
-            for item in normal[:5]:  # Limit display
-                formatted.append(f"- {item.get('test', 'N/A')}: {item.get('value', 'N/A')} {item.get('unit', '')}")
+        summary = f"Normal: {normal_count}, Abnormal: {abnormal_count}, Critical: {critical_count}"
         
-        # Abnormal values
-        abnormal = lab_analysis.get("abnormal_values", [])
-        if abnormal:
-            formatted.append(f"\n**Abnormal Values ({len(abnormal)}):**")
-            for item in abnormal:
-                status = item.get('status', 'ABNORMAL')
-                formatted.append(f"- {item.get('test', 'N/A')}: {item.get('value', 'N/A')} {item.get('unit', '')} [{status}]")
-        
-        # Critical values
+        # Add critical details if any
         critical = lab_analysis.get("critical_values", [])
         if critical:
-            formatted.append(f"\n**🚨 CRITICAL Values ({len(critical)}):**")
-            for item in critical:
-                formatted.append(f"- {item.get('test', 'N/A')}: {item.get('value', 'N/A')} {item.get('unit', '')} [CRITICAL]")
+            critical_details = []
+            for item in critical[:3]:  # Max 3 critical items
+                critical_details.append(f"{item.get('test', 'N/A')}: {item.get('value', 'N/A')}")
+            summary += f" | CRITICAL: {', '.join(critical_details)}"
         
-        return "\n".join(formatted) if formatted else "No detailed analysis available"
+        return summary
     
     def create_custom_prompt(self, template: str, variables: Dict[str, Any]) -> ChatPromptTemplate:
         """Create a custom prompt template"""
@@ -302,7 +212,6 @@ class PromptManager:
         """Get list of available template names"""
         return [
             "LAB_ANALYSIS_TEMPLATE",
-            "CRITICAL_VALUES_TEMPLATE", 
             "TREND_ANALYSIS_TEMPLATE",
             "MEDICATION_INTERACTION_TEMPLATE"
         ]
@@ -310,7 +219,7 @@ class PromptManager:
     def validate_prompt_data(self, lab_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and clean lab data for prompts"""
         validated_data = {
-            "raw_text": str(lab_data.get("raw_text", ""))[:3000],  # Limit text length
+            "raw_text": str(lab_data.get("raw_text", ""))[:1500],  # Further reduced for token optimization
             "medical_entities": lab_data.get("medical_entities", []),
             "lab_values": lab_data.get("lab_values", {}),
             "quantities": lab_data.get("quantities", []),
@@ -332,6 +241,80 @@ class PromptManager:
             validated_data["quantities"] = []
         
         return validated_data
+    
+    def parse_compact_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse the compact response format into structured data for UI"""
+        import re
+        
+        parsed = {
+            "summary": "",
+            "values": [],
+            "status": {"normal": 0, "abnormal": 0, "critical": 0},
+            "recommendations": {
+                "lifestyle": "",
+                "followup": "",
+                "doctor": ""
+            }
+        }
+        
+        # Extract summary
+        summary_match = re.search(r'\*\*SUMMARY:\*\*\s*(.+)', response_text)
+        if summary_match:
+            parsed["summary"] = summary_match.group(1).strip()
+        
+        # Extract values (pipe-separated format)
+        values_match = re.search(r'\*\*VALUES:\*\*\s*(.+)', response_text)
+        if values_match:
+            values_line = values_match.group(1).strip()
+            # Split by | and parse each value
+            for value_item in values_line.split('|'):
+                value_item = value_item.strip()
+                if ':' in value_item:
+                    # Parse format: "Test: Value (Range) Status"
+                    test_match = re.match(r'([^:]+):\s*([^(]+)\s*\(([^)]+)\)\s*(.*)', value_item)
+                    if test_match:
+                        test_name, value, range_info, status = test_match.groups()
+                        # Determine status from emoji or text
+                        if '🚨' in status or 'CRITICAL' in status:
+                            status_type = 'critical'
+                        elif '⚠️' in status or 'HIGH' in status or 'LOW' in status:
+                            status_type = 'abnormal'
+                        else:
+                            status_type = 'normal'
+                        
+                        parsed["values"].append({
+                            "test": test_name.strip(),
+                            "value": value.strip(),
+                            "range": range_info.strip(),
+                            "status": status_type,
+                            "display_status": status.strip()
+                        })
+        
+        # Extract status counts
+        status_match = re.search(r'\*\*STATUS:\*\*\s*Normal:\s*(\d+)\s*\|\s*Abnormal:\s*(\d+)\s*\|\s*Critical:\s*(\d+)', response_text)
+        if status_match:
+            parsed["status"]["normal"] = int(status_match.group(1))
+            parsed["status"]["abnormal"] = int(status_match.group(2))
+            parsed["status"]["critical"] = int(status_match.group(3))
+        
+        # Extract recommendations
+        recs_section = re.search(r'\*\*RECOMMENDATIONS:\*\*\s*(.*?)(?:\*\*|$)', response_text, re.DOTALL)
+        if recs_section:
+            recs_text = recs_section.group(1)
+            
+            lifestyle_match = re.search(r'🏃\s*Lifestyle:\s*([^🔬👨‍⚕️]+)', recs_text)
+            if lifestyle_match:
+                parsed["recommendations"]["lifestyle"] = lifestyle_match.group(1).strip()
+            
+            followup_match = re.search(r'🔬\s*Follow-up:\s*([^🏃👨‍⚕️]+)', recs_text)
+            if followup_match:
+                parsed["recommendations"]["followup"] = followup_match.group(1).strip()
+            
+            doctor_match = re.search(r'👨‍⚕️\s*Doctor:\s*([^🏃🔬]+)', recs_text)
+            if doctor_match:
+                parsed["recommendations"]["doctor"] = doctor_match.group(1).strip()
+        
+        return parsed
 
 # Usage example and testing
 if __name__ == "__main__":
@@ -356,25 +339,27 @@ if __name__ == "__main__":
                 {"test": "glucose", "value": 145, "unit": "mg/dL", "status": "HIGH"},
                 {"test": "cholesterol", "value": 220, "unit": "mg/dL", "status": "HIGH"}
             ],
-            "critical_values": []
+            "critical_values": [] # Example: if glucose was 45, it would be here
         }
     }
     
     print("🧪 Testing Prompt Templates...")
     
-    # Test lab analysis prompt
+    # Test lab analysis prompt (now includes critical values logic)
     formatted_data = prompt_manager.format_lab_data_for_prompt(sample_lab_data)
-    lab_prompt = prompt_manager.get_lab_analysis_prompt(sample_lab_data)
+    lab_prompt_messages = prompt_manager.get_lab_analysis_prompt(sample_lab_data).format_prompt(**formatted_data).to_messages()
     
-    print("✅ Lab analysis prompt created")
+    print("✅ Lab analysis prompt created (now includes critical values logic)")
     print(f"✅ Formatted data keys: {list(formatted_data.keys())}")
-    
-    # Test critical values prompt
-    critical_prompt = prompt_manager.get_critical_values_prompt(sample_lab_data)
-    print("✅ Critical values prompt created")
     
     # Test available templates
     templates = prompt_manager.get_available_templates()
-    print(f"✅ Available templates: {len(templates)}")
+    print(f"✅ Available templates: {len(templates)} - 'CRITICAL_VALUES_TEMPLATE' should be gone")
     
-    print("🎯 Prompt templates module ready for use!")
+    # You can print the generated prompt to inspect it
+    # print("\n--- Generated Lab Analysis Prompt ---")
+    # for message in lab_prompt_messages:
+    #    print(f"Role: {message.type}\nContent: {message.content}\n---")
+
+    print("\n🎯 Prompt templates module ready for consolidated analysis!")
+
