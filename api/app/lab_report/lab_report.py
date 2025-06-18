@@ -1,6 +1,6 @@
 """
 Lab Report Analysis System - Main Integration Module
-Integrates OCR, MedCat, Prompting, and LLM components for comprehensive lab report analysis
+Integrates OCR and LLM components for comprehensive lab report analysis
 """
 
 import os
@@ -11,9 +11,8 @@ from datetime import datetime
 
 # Local module imports
 from .ocr_processor import OCRProcessor
-from .medical_extractor import MedicalEntityExtractor, SystemCapabilities
 from .prompt_templates import PromptManager
-from .llm_client import MedicalLLMClient, LabReportAnalyzer as LLMAnalyzer
+from .llm_client import MedicalLLMClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +22,8 @@ class LabReportAnalyzer:
     """
     Complete Lab Report Analysis System
     
-    Workflow: Image/PDF → OCR (Tesseract + OCR.space) → MedCat NLP → LLM Analysis
-    Features: GPU/CPU optimization, comprehensive error handling, medical-grade accuracy
+    Workflow: Image/PDF → OCR (Tesseract + OCR.space) → LLM Analysis
+    Features: Comprehensive error handling, medical-grade accuracy
     """
     
     def __init__(self, litellm_api_key: str = None):
@@ -32,29 +31,21 @@ class LabReportAnalyzer:
         # Use environment variable if no API key is provided
         self.litellm_api_key = litellm_api_key or os.getenv("LITELLM_API_KEY")
         
-        # Initialize system capabilities and components
+        # Initialize components
         logger.info("Initializing Lab Report Analysis System...")
-        
-        # System capabilities detection
-        self.system_caps = SystemCapabilities()
         
         # Initialize core components
         self.ocr_processor = OCRProcessor()
-        self.entity_extractor = MedicalEntityExtractor(self.system_caps)
         self.prompt_manager = PromptManager()
         
         # Only initialize LLM components if API key is available
         if self.litellm_api_key and self.litellm_api_key != "your-litellm-api-key-here":
             self.llm_client = MedicalLLMClient(self.litellm_api_key)
-            self.analyzer = LLMAnalyzer(self.litellm_api_key)
         else:
             self.llm_client = None
-            self.analyzer = None
             logger.warning("LiteLLM API key not provided - LLM analysis will be unavailable")
         
         logger.info(f"✅ Lab Report Analyzer initialized successfully!")
-        logger.info(f"🖥️  Processing device: {self.system_caps.device.upper()}")
-        logger.info(f"🔧 GPU available: {self.system_caps.has_gpu}")
         
     def analyze_lab_report(self, file_path: str) -> Dict[str, Any]:
         """
@@ -69,8 +60,8 @@ class LabReportAnalyzer:
         start_time = datetime.now()
         
         try:
-            # Check if LLM analyzer is available
-            if not self.analyzer:
+            # Check if LLM client is available
+            if not self.llm_client:
                 return {
                     "success": False,
                     "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
@@ -101,9 +92,48 @@ class LabReportAnalyzer:
             
             logger.info(f"✅ OCR completed. Extracted {len(raw_text)} characters")
             
-            # Step 2: Comprehensive analysis using integrated system
-            logger.info("🧠 Step 2: Medical analysis...")
-            analysis_result = self.analyzer.analyze_extracted_data({"raw_text": raw_text})
+            print("\n" + "="*80)
+            print("🔍 PIPELINE STEP 1: OCR OUTPUT → DIRECT LLM")
+            print("="*80)
+            print(raw_text[:500] + ("..." if len(raw_text) > 500 else ""))
+            print("-" * 50)
+            print(f"📄 Full Raw OCR Text:")
+            print(repr(raw_text))  # Shows exact string with escape characters
+            print("="*80 + "\n")
+            
+            lab_data = {
+                "raw_text": raw_text,
+                "medical_entities": [],  # Empty - LLM will extract from raw text
+                "lab_values": {},        # Empty - LLM will extract from raw text
+                "quantities": [],        # Empty - LLM will extract from raw text
+                "lab_analysis": {}       # Empty - LLM will analyze directly
+            }
+            
+            # Direct LLM analysis
+            start_llm_time = datetime.now()
+            ai_analysis = self.llm_client.analyze_lab_report(lab_data)
+            llm_processing_time = (datetime.now() - start_llm_time).total_seconds()
+            
+            # Create analysis result structure
+            analysis_result = {
+                "success": True,
+                "raw_text": raw_text,
+                "ai_analysis": ai_analysis,
+                "processing_time": llm_processing_time,
+                "system_info": {
+                    "llm_status": self.llm_client.get_system_status()
+                }
+            }
+            
+            # print(f"🤖 Data Structure Sent Directly to LLM:")
+            llm_input_structure = {
+                "raw_text": f"'{raw_text[:100]}...'" if len(raw_text) > 100 else f"'{raw_text}'",
+                "processing_time": f"{llm_processing_time:.2f}s"
+            }
+            # for key, value in llm_input_structure.items():
+            #     print(f"   • {key}: {value}")
+            
+            # print("="*80 + "\n")
             
             # Add file processing information
             analysis_result.update({
@@ -139,7 +169,7 @@ class LabReportAnalyzer:
         Returns:
             Analysis results dictionary
         """
-        if not self.analyzer:
+        if not self.llm_client:
             return {
                 "success": False,
                 "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
@@ -147,8 +177,63 @@ class LabReportAnalyzer:
             }
         
         logger.info("🔬 Starting text-only analysis...")
-        return self.analyzer.analyze_text_only(text)
-    
+        
+        # 🔍 PIPELINE TRACKING 1: Input Text to LLM
+        print("\n" + "="*80)
+        print("🔍 PIPELINE STEP 1: INPUT TEXT → DIRECT LLM")
+        print("="*80)
+        print(f"📄 Input Text Length: {len(text)} characters")
+        print("📄 Input Text Preview (first 500 chars):")
+        print("-" * 50)
+        print(text[:500] + ("..." if len(text) > 500 else ""))
+        print("-" * 50)
+        print(f"📄 Full Input Text:")
+        print(repr(text))  # Shows exact string with escape characters
+        print("="*80 + "\n")
+        
+        start_time = datetime.now()
+        
+        try:
+            # Prepare lab data for LLM analysis
+            lab_data = {
+                "raw_text": text,
+                "medical_entities": [],  # Empty - LLM will extract from raw text
+                "lab_values": {},        # Empty - LLM will extract from raw text
+                "quantities": [],        # Empty - LLM will extract from raw text
+                "lab_analysis": {}       # Empty - LLM will analyze directly
+            }
+            
+            # Direct LLM analysis
+            ai_analysis = self.llm_client.analyze_lab_report(lab_data)
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            result = {
+                "success": True,
+                "raw_text": text,
+                "ai_analysis": ai_analysis,
+                "processing_time": processing_time,
+                "system_info": {
+                    "llm_status": self.llm_client.get_system_status()
+                }
+            }
+            
+            print("\n" + "="*80)
+            print("🔍 PIPELINE STEP 2: LLM ANALYSIS COMPLETED")
+            print("="*80)
+            print(f"⏱️  Processing time: {processing_time:.2f}s")
+            print("="*80 + "\n")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Text analysis failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "raw_text": text,
+                "processing_time": (datetime.now() - start_time).total_seconds()
+            }
+
     def analyze_with_context(self, file_path: str, 
                            patient_medications: list = None,
                            previous_results: Dict[str, Any] = None,
@@ -175,7 +260,7 @@ class LabReportAnalyzer:
             # Add medication interaction analysis
             if patient_medications:
                 logger.info("💊 Analyzing medication interactions...")
-                medication_analysis = self.analyze_with_medications(result, patient_medications)
+                medication_analysis = self.llm_client.analyze_medication_interactions(result, patient_medications)
                 result["medication_analysis"] = medication_analysis
             
             # Add trend analysis
@@ -245,16 +330,7 @@ class LabReportAnalyzer:
         """Get comprehensive system status and capabilities"""
         # Base system info
         system_info = {
-            "gpu_available": self.system_caps.has_gpu,
-            "device": self.system_caps.device,
-            "gpu_memory_gb": self.system_caps.gpu_memory,
-            "optimal_batch_size": self.system_caps.get_optimal_batch_size(),
-            "models_loaded": {
-                "spacy": self.entity_extractor.nlp is not None,
-                "biomedical_ner": self.entity_extractor.biomedical_ner is not None,  # Primary
-                "medcat": self.entity_extractor.medcat is not None,  # Conditional
-                "llm_model": self.analyzer is not None
-            }
+            "llm_model": self.llm_client is not None
         }
         
         return {
@@ -264,18 +340,9 @@ class LabReportAnalyzer:
                 "ocr_space_configured": bool(os.getenv("OCR_SPACE_API_KEY")),
                 "supported_formats": self.ocr_processor.get_supported_formats()
             },
-            "nlp_info": {
-                "spacy_available": self.entity_extractor.nlp is not None,
-                "biomedical_ner_available": self.entity_extractor.biomedical_ner is not None,
-                "medcat_available": self.entity_extractor.medcat is not None,
-                "medcat_lazy_loading": (self.entity_extractor.medcat is None and 
-                                      hasattr(self.entity_extractor, '_lazy_load_medcat_if_needed')),
-                "device_used": self.system_caps.device,
-                "model_strategy": "biomedical_ner_primary_medcat_conditional"
-            },
             "llm_info": {
                 "model": self.llm_client.model if self.llm_client else None,
-                "api_configured": bool(self.litellm_api_key and self.litellm_api_key != "your-litellm-api-key-here")
+                "api_configured": bool(self.litellm_api_key and self.litellm_api_key != "your-litellm_api_key-here")
             }
         }
 
@@ -293,39 +360,11 @@ class LabReportAnalyzer:
             validation["warnings"].append("OCR.space API key not configured - only Tesseract will be used")
             validation["recommendations"].append("Set OCR_SPACE_API_KEY environment variable for better OCR fallback")
         
-        # Check Biomedical NER setup (PRIMARY)
-        if not self.entity_extractor.biomedical_ner:
-            validation["warnings"].append("Biomedical NER model not available - MedCAT will be used as primary")
-            validation["recommendations"].append("Biomedical NER provides better medical entity extraction")
-        
-        # Check MedCAT setup (CONDITIONAL)
-        if not self.entity_extractor.medcat and not hasattr(self.entity_extractor, '_lazy_load_medcat_if_needed'):
-            validation["warnings"].append("MedCAT not available for fallback - using regex only")
-            validation["recommendations"].append("MedCAT provides better fallback for insufficient results")
-        
-        # Check spaCy setup
-        if not self.entity_extractor.nlp:
-            validation["issues"].append("spaCy model not available")
-            validation["recommendations"].append("Install spaCy model: python -m spacy download en_core_web_sm")
-        
         # Check LLM setup
         if not self.litellm_api_key or self.litellm_api_key == "your-litellm-api-key-here":
             validation["issues"].append("LiteLLM API key not configured")
             validation["recommendations"].append("Set LITELLM_API_KEY environment variable")
             validation["overall_status"] = "❌ Configuration Issues"
-        
-        # Check GPU setup
-        if not self.system_caps.has_gpu:
-            validation["warnings"].append("No GPU detected - using CPU processing (slower)")
-            validation["recommendations"].append("Consider GPU setup for faster processing")
-        
-        # Model strategy status
-        if self.entity_extractor.biomedical_ner:
-            validation["recommendations"].append("✅ Optimal setup: Biomedical NER (primary) + MedCAT (conditional fallback)")
-        elif self.entity_extractor.medcat:
-            validation["warnings"].append("Suboptimal: MedCAT as primary (Biomedical NER preferred)")
-        else:
-            validation["warnings"].append("Basic setup: Regex-only extraction (install medical models)")
         
         if validation["issues"]:
             validation["overall_status"] = "❌ Configuration Issues"
@@ -344,26 +383,6 @@ class LabReportAnalyzer:
             return "Tesseract + OCR.space fallback"
         else:
             return "Tesseract only"
-    
-    def analyze_with_medications(self, analysis_result: Dict[str, Any], medications: List[str]) -> str:
-        """
-        Analyze medication interactions with lab results
-        
-        Args:
-            analysis_result: Lab analysis results
-            medications: List of current medications
-            
-        Returns:
-            Medication interaction analysis string
-        """
-        if not self.llm_client:
-            return "Medication analysis unavailable - OpenAI API key not configured"
-        
-        try:
-            return self.llm_client.analyze_medication_interactions(analysis_result, medications)
-        except Exception as e:
-            logger.error(f"Medication analysis failed: {e}")
-            return f"Medication analysis failed: {str(e)}"
 
 # Convenience function for quick analysis
 def analyze_lab_report(file_path: str, litellm_api_key: str = None) -> Dict[str, Any]:
@@ -482,7 +501,6 @@ if __name__ == "__main__":
     print("\n🎯 Lab Report Analysis System ready for use!")
     print("   - Supports images (JPG, PNG, TIFF) and PDFs")
     print("   - Uses Tesseract + OCR.space API for text extraction") 
-    print("   - Employs MedCat for medical entity recognition")
     print("   - Provides comprehensive AI analysis via LangChain + OpenAI")
     print("   - Optimized for both GPU and CPU processing")
 
