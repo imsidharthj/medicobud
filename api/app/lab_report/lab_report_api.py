@@ -34,12 +34,6 @@ router = APIRouter(
 )
 
 # Pydantic models for requests/responses
-class LabAnalysisRequest(BaseModel):
-    """Request model for lab analysis without file upload"""
-    text_content: str = Field(..., description="Lab report text content")
-    include_trends: bool = Field(False, description="Include trend analysis if previous results available")
-    medications: Optional[List[str]] = Field(None, description="Current medications for interaction analysis")
-
 class LabAnalysisResponse(BaseModel):
     """Response model for lab analysis results"""
     success: bool
@@ -303,54 +297,6 @@ async def analyze_lab_report_file(
         except Exception as e:
             logger.warning(f"Failed to clean up file {file_path}: {e}")
 
-@router.post("/analyze-text", response_model=LabAnalysisResponse)
-async def analyze_lab_text(
-    request: LabAnalysisRequest
-):
-    """Analyze lab report from text input - Simplified for testing"""
-    
-    try:
-        analyzer = get_analyzer()
-        
-        # Analyze text with optional medication context
-        if request.medications:
-            # Create temporary data structure for context analysis
-            temp_result = analyzer.analyze_text_only(request.text_content)
-            if temp_result["success"]:
-                medication_analysis = analyzer.analyze_with_medications(
-                    temp_result, request.medications
-                )
-                temp_result["medication_analysis"] = medication_analysis
-            result = temp_result
-        else:
-            result = analyzer.analyze_text_only(request.text_content)
-        
-        if result["success"]:
-            return LabAnalysisResponse(
-                success=True,
-                analysis_id=f"text_analysis_{int(datetime.now().timestamp())}",
-                raw_text=result.get("raw_text"),
-                extracted_entities=result.get("extracted_entities"),
-                lab_analysis=result.get("lab_analysis"),
-                ai_analysis=result.get("ai_analysis"),
-                critical_assessment=result.get("critical_assessment"),
-                medication_analysis=result.get("medication_analysis"),
-                processing_time=result.get("processing_time"),
-                system_info=result.get("system_info")
-            )
-        else:
-            return LabAnalysisResponse(
-                success=False,
-                error=result.get("error", "Text analysis failed")
-            )
-            
-    except Exception as e:
-        logger.error(f"Text analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Text analysis failed: {str(e)}"
-        )
-
 # System status and health check endpoints
 
 @router.get("/system/status", response_model=SystemStatusResponse)
@@ -378,26 +324,17 @@ async def get_system_status():
         temp_analyzer = LabReportAnalyzer(test_key)
         system_status = temp_analyzer.get_system_status()
         
-        # Extract system info from the correct structure
+        # Extract system info from the simplified structure
         system_info = system_status.get('system_info', {})
         ocr_info = system_status.get('ocr_info', {})
-        nlp_info = system_status.get('nlp_info', {})
+        llm_info = system_status.get('llm_info', {})
         
         primary_available = bool(litellm_key)
         fallback_available = bool(deepseek_key)
         
-        # Determine overall status with model strategy
-        biomedical_ner_available = nlp_info.get('biomedical_ner_available', False)
-        medcat_available = nlp_info.get('medcat_available', False)
-        medcat_lazy_loading = nlp_info.get('medcat_lazy_loading', False)
-        
+        # Determine overall status
         if primary_available and fallback_available:
-            if biomedical_ner_available:
-                status = "✅ Optimal (BioBERT + MedCAT conditional + LLM fallback)"
-            elif medcat_available:
-                status = "⚠️ Good (MedCAT primary + LLM fallback)"
-            else:
-                status = "⚠️ Basic (Regex + LLM fallback)"
+            status = "✅ Ready (LLM + Fallback)"
         elif primary_available or fallback_available:
             status = "⚠️ Ready (Limited LLM)"
         else:
@@ -405,30 +342,23 @@ async def get_system_status():
         
         recommendations = []
         if not primary_available:
-            recommendations.append("Set LITELLM_API_KEY for primary LLM (openai/gpt-4.1-mini)")
+            recommendations.append("Set LITELLM_API_KEY for primary LLM (gemini/gemini-2.5-flash-preview-05-20)")
         if not fallback_available:
             recommendations.append("Set DEEPSEEK_API_KEY for fallback reliability")
         if not ocr_info.get('ocr_space_configured', False):
             recommendations.append("Set OCR_SPACE_API_KEY for better OCR fallback")
-        if not biomedical_ner_available:
-            recommendations.append("Biomedical NER model will be downloaded on first use for optimal results")
-        if not medcat_available and not medcat_lazy_loading:
-            recommendations.append("MedCAT model not available for fallback")
         
         return SystemStatusResponse(
             status=status,
-            gpu_available=system_info.get("gpu_available", False),
-            device=system_info.get("device", "unknown"),
-            ocr_configured=ocr_info.get("ocr_space_configured", False),
-            medcat_available=medcat_available or medcat_lazy_loading,
-            spacy_available=nlp_info.get("spacy_available", False),
+            gpu_available=False,  # Simplified - not using GPU features
+            device="cpu",
+            ocr_configured=ocr_info.get('ocr_space_configured', False),
+            medcat_available=False,  # Not using medical_extractor
+            spacy_available=False,   # Not using medical_extractor
             models_loaded={
-                "spacy": nlp_info.get("spacy_available", False),
-                "biomedical_ner": biomedical_ner_available,
-                "medcat": medcat_available,
-                "medcat_lazy_loading": medcat_lazy_loading,
                 "primary_llm": primary_available,
-                "fallback_llm": fallback_available
+                "fallback_llm": fallback_available,
+                "ocr": True  # OCR processor is always available
             },
             recommendations=recommendations
         )
@@ -449,26 +379,18 @@ async def get_system_status():
 async def check_analysis_system():
     """Detailed health check for the analysis system"""
     try:
-        from .medical_extractor import SystemCapabilities
-        caps = SystemCapabilities()
-        
         health_info = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "gpu_available": caps.has_gpu,
-            "device": caps.device,
-            "gpu_memory_gb": caps.gpu_memory,
-            "optimal_batch_size": caps.get_optimal_batch_size(),
+            "gpu_available": False,  # Simplified - not using GPU features
+            "device": "cpu",
             "environment_variables": {
                 "litellm_api_key_set": bool(os.getenv("LITELLM_API_KEY")),
                 "deepseek_api_key_set": bool(os.getenv("DEEPSEEK_API_KEY")),
-                "ocr_space_api_key_set": bool(os.getenv("OCR_SPACE_API_KEY")),
-                "medcat_model_path_set": bool(os.getenv("MEDCAT_MODEL_PATH"))
+                "ocr_space_api_key_set": bool(os.getenv("OCR_SPACE_API_KEY"))
             },
             "dependencies": {
-                "torch_available": True,  # We imported it successfully
                 "tesseract_available": True,  # OCRProcessor checks this
-                "spacy_available": True,
                 "langchain_available": True
             }
         }
