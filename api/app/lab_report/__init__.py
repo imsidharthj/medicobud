@@ -11,7 +11,7 @@ Components:
 """
 
 from .lab_report import LabReportAnalyzer, analyze_lab_report
-from .medical_extractor import SystemCapabilities, MedicalEntityExtractor
+# from .medical_extractor import SystemCapabilities, MedicalEntityExtractor
 from .ocr_processor import OCRProcessor
 from .prompt_templates import PromptManager, MedicalPromptTemplates
 from .llm_client import MedicalLLMClient
@@ -20,8 +20,8 @@ __version__ = "1.0.0"
 __all__ = [
     "LabReportAnalyzer",
     "analyze_lab_report", 
-    "SystemCapabilities",
-    "MedicalEntityExtractor",
+    # "SystemCapabilities",
+    # "MedicalEntityExtractor",
     "OCRProcessor",
     "PromptManager",
     "MedicalPromptTemplates",
