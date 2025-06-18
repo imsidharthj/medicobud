@@ -12,3 +12,9 @@ __pycache__/
 api/
 .env
 uploads/
+
+app/lab_report/MedCat_model/SnomedCT_InternationalRF2_PRODUCTION_20250601T120000Z.zip
+
+app/lab_report/cached_models/
+app/lab_report/MedCat_model/medcat_model_pack/
+pect
