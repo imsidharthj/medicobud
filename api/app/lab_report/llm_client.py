@@ -116,57 +116,84 @@ class MedicalLLMClient:
                                                    f"LiteLLM failed: {litellm_error}. DeepSeek fallback not configured.")
     
     def analyze_lab_report(self, lab_data: Dict[str, Any]) -> str:
-        """Comprehensive lab report analysis using specialized medical prompts with fallback"""
+        """Comprehensive lab report analysis (now includes critical values) using specialized medical prompts with fallback"""
         try:
             # Validate and format lab data
             validated_data = self.prompt_manager.validate_prompt_data(lab_data)
             formatted_data = self.prompt_manager.format_lab_data_for_prompt(validated_data)
             
-            # Get lab analysis prompt
+            # Get lab analysis prompt (this now implicitly handles critical values)
             prompt_template = self.prompt_manager.get_lab_analysis_prompt(validated_data)
             
+            # 🔍 PIPELINE TRACKING 3: LLM CLIENT DATA & PROMPT
+            print("\n" + "="*80)
+            print("🔍 PIPELINE STEP 3: LLM CLIENT - DATA & PROMPT DETAILS")
+            print("="*80)
+            
+            # print("📋 Raw Lab Data Received by LLM Client:")
+            # print("-" * 50)
+            # for key, value in lab_data.items():
+            #     if key == "raw_text":
+            #         print(f"   • {key}: '{value[:100]}...'" if len(str(value)) > 100 else f"   • {key}: '{value}'")
+            #     elif key == "parsed_table":
+            #         print(f"   • {key}: {len(value) if value else 0} rows")
+            #         if value:
+            #             print("     Sample rows:")
+            #             for i, row in enumerate(value[:3]):
+            #                 print(f"       {i+1}. {row}")
+            #             if len(value) > 3:
+            #                 print(f"       ... and {len(value) - 3} more rows")
+            #     else:
+            #         print(f"   • {key}: {value}")
+            
+            # print("\n📝 Validated & Formatted Data for Prompt:")
+            # print("-" * 50)
+            # for key, value in formatted_data.items():
+            #     print(f"   • {key}: {value[:200]}..." if len(str(value)) > 200 else f"   • {key}: {value}")
+            
+            print("\n🤖 Full Prompt Template:")
+            print("-" * 50)
+            # Get the actual prompt text by formatting it with the data
+            try:
+                formatted_prompt = prompt_template.format_prompt(**formatted_data)
+                prompt_text = formatted_prompt.to_string()
+                print(prompt_text)
+            except Exception as prompt_error:
+                print(f"Error formatting prompt: {prompt_error}")
+                print("Raw prompt template structure:", prompt_template)
+            
+            print("-" * 50)
+            print("🚀 Sending to LLM...")
+            print("="*80 + "\n")
+            
             # Define chain function
             def create_chain(llm):
                 return prompt_template | llm | StrOutputParser()
             
-            logger.info("Starting comprehensive lab analysis...")
+            logger.info("Starting comprehensive lab analysis (including critical values assessment)...")
             start_time = datetime.now()
             
-            response = self._execute_with_fallback(create_chain, formatted_data, "lab analysis")
+            response = self._execute_with_fallback(create_chain, formatted_data, "comprehensive lab analysis")
             
             processing_time = (datetime.now() - start_time).total_seconds()
-            logger.info(f"Lab analysis completed in {processing_time:.2f} seconds")
+            logger.info(f"Comprehensive lab analysis completed in {processing_time:.2f} seconds")
+            
+            # 🔍 PIPELINE TRACKING 4: LLM RESPONSE
+            print("\n" + "="*80)
+            print("🔍 PIPELINE STEP 4: LLM RESPONSE")
+            print("="*80)
+            print("🤖 Full LLM Response:")
+            print(response)
+            print("="*80 + "\n")
             
             return response
             
         except Exception as e:
-            logger.error(f"Lab analysis failed completely: {e}")
+            logger.error(f"Lab analysis failed completely: {e}", exc_info=True) # Added exc_info for detailed traceback
             return self._generate_fallback_analysis(lab_data, str(e))
     
-    def check_critical_values(self, lab_data: Dict[str, Any]) -> str:
-        """Check for critical values requiring immediate medical attention with fallback"""
-        try:
-            # Format lab data for critical assessment
-            formatted_data = {
-                "lab_data": json.dumps(lab_data, indent=2)
-            }
-            
-            # Get critical values prompt
-            prompt_template = self.prompt_manager.get_critical_values_prompt(lab_data)
-            
-            # Define chain function
-            def create_chain(llm):
-                return prompt_template | llm | StrOutputParser()
-            
-            logger.info("Performing critical values assessment...")
-            response = self._execute_with_fallback(create_chain, formatted_data, "critical values check")
-            
-            return response
-            
-        except Exception as e:
-            logger.error(f"Critical values check failed completely: {e}")
-            return self._generate_fallback_critical_assessment(lab_data, str(e))
-    
+    # Removed check_critical_values method as it's now integrated
+
     def analyze_trends(self, current_results: Dict[str, Any], 
                       previous_results: Dict[str, Any] = None,
                       time_period: str = "Not specified") -> str:
@@ -192,7 +219,7 @@ class MedicalLLMClient:
             return response
             
         except Exception as e:
-            logger.error(f"Trend analysis failed completely: {e}")
+            logger.error(f"Trend analysis failed completely: {e}", exc_info=True)
             return f"Trend analysis failed: {str(e)}"
     
     def analyze_medication_interactions(self, lab_results: Dict[str, Any],
@@ -218,7 +245,7 @@ class MedicalLLMClient:
             return response
             
         except Exception as e:
-            logger.error(f"Medication interaction analysis failed completely: {e}")
+            logger.error(f"Medication interaction analysis failed completely: {e}", exc_info=True)
             return f"Medication interaction analysis failed: {str(e)}"
     
     def _generate_error_fallback(self, formatted_data: Dict[str, Any], operation: str, error_msg: str) -> str:
@@ -294,67 +321,7 @@ class MedicalLLMClient:
         
         return fallback_analysis
     
-    def _generate_fallback_critical_assessment(self, lab_data: Dict[str, Any], error: str) -> str:
-        """Generate fallback critical assessment when LLM fails"""
-        lab_values = lab_data.get("lab_values", {})
-        
-        # Basic critical value ranges (simplified)
-        critical_ranges = {
-            'glucose': (50, 400),
-            'hemoglobin': (7, 20),
-            'platelets': (20, 1000),
-            'creatinine': (0, 5.0),
-            'potassium': (2.5, 6.0),
-            'sodium': (125, 155)
-        }
-        
-        critical_found = []
-        
-        for test_name, values in lab_values.items():
-            if test_name.lower() in critical_ranges:
-                min_val, max_val = critical_ranges[test_name.lower()]
-                
-                if isinstance(values, list) and values:
-                    try:
-                        value = float(values[0][0])  # First value, first element (value)
-                        if value < min_val or value > max_val:
-                            critical_found.append(f"{test_name}: {value}")
-                    except (ValueError, IndexError):
-                        continue
-        
-        system_status = f"Primary LLM (LiteLLM): ❌ Failed, Fallback LLM (DeepSeek): ❌ {'Failed' if self.fallback_llm else 'Not configured'}"
-        
-        if critical_found:
-            return f"""
-🚨 **POTENTIAL CRITICAL VALUES DETECTED** 🚨
-
-**System Error**: {error}
-**System Status**: {system_status}
-
-**Potentially Critical Values Found**:
-{chr(10).join(f"- {item}" for item in critical_found)}
-
-**IMMEDIATE ACTION REQUIRED**:
-1. Seek immediate medical attention
-2. Contact your healthcare provider NOW
-3. Go to the nearest emergency room if symptoms present
-4. Do not delay medical care
-
-**This is a basic screening only. Professional medical evaluation is essential.**
-
-**Technical Note**: AI analysis systems are temporarily unavailable. This assessment is based on basic value ranges only.
-"""
-        else:
-            return f"""
-✅ **No immediately critical values detected in basic screening.**
-
-**System Error**: {error}
-**System Status**: {system_status}
-
-**Important**: AI analysis failed, but basic screening completed. Please consult with healthcare professionals for proper interpretation of your lab results.
-
-**Technical Note**: Try the analysis again later when AI services are restored.
-"""
+    # Removed _generate_fallback_critical_assessment as it's no longer needed
     
     def get_system_status(self) -> Dict[str, Any]:
         """Get current system status including fallback availability"""
@@ -405,7 +372,7 @@ class LabReportAnalyzer:
             logger.info("Extracting medical entities...")
             entities = self.entity_extractor.extract_entities(extracted_data.get("raw_text", ""))
             
-            # Step 2: Lab Values Analysis
+            # Step 2: Lab Values Analysis (still needed for counts and structured data for prompt)
             logger.info("Analyzing lab values...")
             lab_analysis = self.entity_extractor.analyze_lab_values(entities["lab_values"])
             
@@ -416,17 +383,13 @@ class LabReportAnalyzer:
                 "lab_values": entities["lab_values"],
                 "quantities": entities["quantities"],
                 "spacy_entities": entities["spacy_entities"],
-                "lab_analysis": lab_analysis,
+                "lab_analysis": lab_analysis, # This includes normal/abnormal/critical counts
                 "processing_info": entities["processing_info"]
             }
             
-            # Step 4: LLM Analysis (with fallback support)
-            logger.info("Performing comprehensive LLM analysis...")
+            # Step 4: LLM Analysis (now a SINGLE call that includes critical values assessment)
+            logger.info("Performing comprehensive LLM analysis (including critical values assessment)...")
             analysis = self.llm_client.analyze_lab_report(lab_data)
-            
-            # Step 5: Critical values check (with fallback support)
-            logger.info("Checking for critical values...")
-            critical_assessment = self.llm_client.check_critical_values(lab_data)
             
             processing_time = (datetime.now() - start_time).total_seconds()
             
@@ -437,9 +400,8 @@ class LabReportAnalyzer:
                 "success": True,
                 "raw_text": extracted_data.get("raw_text", ""),
                 "extracted_entities": entities,
-                "lab_analysis": lab_analysis,
-                "ai_analysis": analysis,
-                "critical_assessment": critical_assessment,
+                "lab_analysis": lab_analysis, # Still useful for raw counts
+                "ai_analysis": analysis, # This now contains the combined analysis including critical assessment
                 "processing_time": processing_time,
                 "system_info": {
                     "device_used": self.system_caps.device,
@@ -450,7 +412,7 @@ class LabReportAnalyzer:
             }
             
         except Exception as e:
-            logger.error(f"Analysis failed: {e}")
+            logger.error(f"Analysis failed: {e}", exc_info=True) # Added exc_info for detailed traceback
             return {
                 "success": False,
                 "error": str(e),
@@ -480,6 +442,9 @@ class LabReportAnalyzer:
         """Get system capabilities and model information including LLM fallback status"""
         llm_status = self.llm_client.get_system_status()
         
+        # Determine biomedical_ner status based on medcat availability
+        biomedical_ner_available = self.entity_extractor.medcat is not None
+
         return {
             "gpu_available": self.system_caps.has_gpu,
             "device": self.system_caps.device,
@@ -487,14 +452,13 @@ class LabReportAnalyzer:
             "optimal_batch_size": self.system_caps.get_optimal_batch_size(),
             "models_loaded": {
                 "spacy": self.entity_extractor.nlp is not None,
-                "biomedical_ner": self.entity_extractor.biomedical_ner is not None,  # Changed from medcat
-                "medcat": self.entity_extractor.medcat is not None,  # Now shows conditional loading
+                "biomedical_ner": biomedical_ner_available, # Reflects MedCAT status
                 "llm_model": self.llm_client is not None
             },
             "model_strategy": {
-                "primary": "biomedical_ner" if self.entity_extractor.biomedical_ner else "medcat",
-                "medcat_lazy_loading": self.entity_extractor.medcat is None and MEDCAT_AVAILABLE,
-                "fallback_available": True  # Regex is always available
+                "primary_ner": "MedCAT" if biomedical_ner_available else "Regex Fallback",
+                "llm_provider": self.llm_client.model,
+                "fallback_llm_provider": self.llm_client.deepseek_model if self.llm_client.fallback_llm else "None"
             },
             "llm_system": llm_status
         }
@@ -518,12 +482,38 @@ class LabReportAnalyzer:
         if not llm_status['fallback_llm']['available']:
             validation["warnings"].append("DeepSeek fallback not available")
         
-        # Include existing validation logic...
-        # (Keep all the existing validation code from the original method)
+        # Check OCR setup (assuming OCRProcessor handles its own logging for availability)
+        # You can add more explicit checks here if needed, e.g., if self.ocr_processor.is_tesseract_available()
+        
+        # Check MedCat setup
+        if not self.entity_extractor.medcat:
+            validation["warnings"].append("MedCAT model not available - using regex fallback for medical entities.")
+            validation["recommendations"].append("Ensure SNOMED CT zip is correct and MedCAT can build/load its model.")
+        
+        # Check spaCy setup
+        if not self.entity_extractor.nlp:
+            validation["issues"].append("spaCy model 'en_core_web_sm' not loaded.")
+            validation["recommendations"].append("Install spaCy model: `python -m spacy download en_core_web_sm`.")
+        
+        # Check API key for LLM
+        if not self.llm_client.litellm_api_key or self.llm_client.litellm_api_key == "your-litellm-api-key-here":
+            validation["issues"].append("LiteLLM API key not configured.")
+            validation["recommendations"].append("Set `LITELLM_API_KEY` environment variable.")
+            validation["overall_status"] = "❌ Configuration Issues"
+        
+        # Check GPU setup
+        if not self.system_caps.has_gpu:
+            validation["warnings"].append("No GPU detected - using CPU processing (slower).")
+            validation["recommendations"].append("Consider GPU setup for faster processing.")
+        
+        if validation["issues"]:
+            validation["overall_status"] = "❌ Configuration Issues"
+        elif validation["warnings"]:
+            validation["overall_status"] = "⚠️  Ready with Warnings"
         
         return validation
 
-# Usage example and testing
+# Usage example and testing (unchanged)
 if __name__ == "__main__":
     # Example usage with fallback testing - now using LITELLM_API_KEY
     api_key = os.getenv("LITELLM_API_KEY", "your-litellm-api-key-here")
@@ -574,7 +564,13 @@ if __name__ == "__main__":
         else:
             print("🎯 Analysis completed using primary LiteLLM model")
             
+        # You can now parse the 'analysis' string to extract critical findings
+        # based on the new template structure.
+        print("\n--- Combined AI Analysis (Example Snippet) ---")
+        print(analysis[:500] + "..." if len(analysis) > 500 else analysis)
+            
     else:
         print(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
     
     print("\n🎯 LLM Client with LiteLLM + DeepSeek fallback ready for production!")
+
