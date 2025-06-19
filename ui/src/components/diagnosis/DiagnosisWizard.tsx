@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Send, Loader2, User, Users, Check, X, MapPin, Clock, Thermometer, Stethoscope } from 'lucide-react';
+import { AlertCircle, Send, Loader2, User, Users, Check, X, MapPin, Clock, Thermometer, Stethoscope, FileText } from 'lucide-react';
 import { FASTAPI_URL } from '@/utils/api';
 import DiagnosisResultFormatter, { formatDiagnosisResults } from './DiagnosisResultFormatter';
 import Autocomplete from '@/data/autocomplete';
+import LabReportAnalysis from './LabReportAnalysis';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
@@ -112,6 +113,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const [currentInput, setCurrentInput] = useState<string>('');
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [isDiagnosisComplete, setIsDiagnosisComplete] = useState<boolean>(false); 
+  const [showLabReportAnalysis, setShowLabReportAnalysis] = useState<boolean>(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
@@ -356,7 +358,14 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                 <div className="mt-4 max-w-[80%]">
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { value: 'feeling well', label: 'Feeling well', description: "I'm doing good", color: 'green', icon: Check},
+                      { 
+                        value: 'lab_report_analysis', 
+                        label: 'Lab Report Analysis', 
+                        description: "Upload & analyze lab reports", 
+                        color: 'blue', 
+                        icon: FileText,
+                        isSpecial: true
+                      },
                       { value: 'sick', label: 'Sick', description: 'Not feeling good', color: 'red', icon: X },
                       { value: 'ill', label: 'Ill', description: "Something's wrong", color: 'orange', icon: AlertCircle },
                       { value: 'unwell', label: 'Unwell', description: 'Not quite right', color: 'yellow', icon: AlertCircle }
@@ -366,7 +375,13 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                         <div
                           key={option.value}
                           className={`border border-gray-200 rounded-md p-3 flex items-center cursor-pointer transition-all duration-200 hover:border-${option.color}-500 hover:bg-${option.color}-50`}
-                          onClick={() => processMessage(option.value, true)}
+                          onClick={() => {
+                            if (option.isSpecial && option.value === 'lab_report_analysis') {
+                              setShowLabReportAnalysis(true);
+                            } else {
+                              processMessage(option.value, true);
+                            }
+                          }}
                         >
                           <div className={`w-5 h-5 text-${option.color}-500 mr-2 ${option.color === 'yellow' ? 'text-yellow-600' : ''}`}>
                             <IconComponent className="w-full h-full" />
@@ -663,6 +678,23 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       </div>
     );
   };
+
+  if (showLabReportAnalysis) {
+    return (
+      <LabReportAnalysis
+        visitId={undefined} // Will create temporary visit
+        userProfile={propUserProfile ? {
+          name: propUserProfile.name,
+          age: propUserProfile.age,
+          gender: propUserProfile.gender,
+          allergies: propUserProfile.allergies,
+          // medications: propUserProfile.medications
+        } : undefined}
+        onBack={() => setShowLabReportAnalysis(false)}
+        isGuestMode={actualIsGuestMode}
+      />
+    );
+  }
 
   return (
     <Card className="w-full max-w-3xl mx-auto">

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { CircleDot } from "lucide-react";
 
 const steps = [
 	{
@@ -35,54 +36,59 @@ export default function HowItWorksScroll() {
 	);
 
 	return (
-		<section
-			ref={ref}
-            className="bg-[#f0f0f0]"
-            // style={{ height: sectionHeight }}
-			>
-			{/* Sticky container that creates the viewport */}
-			<div className="sticky top-0 h-screen overflow-hidden">
-				<div className="max-w-7xl mx-auto flex h-full px-4 md:px-8">
-					{/* Left Panel - matches the visual line height */}
-					<div className="w-1/3 flex items-center justify-center border-r-2 border-gray-900 pr-6">
-						<h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif text-[#2D3648]">
-							How it works
-						</h2>
-					</div>
+    <section
+      ref={ref}
+      className="bg-[#f0f0f0]"
+      // style={{ height: sectionHeight }}
+    >
+      {/* Sticky container that creates the viewport */}
+      <div className="sticky top-0 h-screen overflow-hidden">
+        <div className="max-w-7xl mx-auto flex h-full px-4 md:px-8">
+          {/* Left Panel - matches the visual line height */}
+          <div className="w-1/3 flex items-center justify-center pr-6">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif text-[#2D3648]">
+              How it works
+            </h2>
+          </div>
 
-					{/* Right Panel */}
-					<div className="w-2/3 relative h-full overflow-hidden">
-						<motion.div
-							style={{ y }}
-							className="absolute top-0 left-0 w-full"
-						>
-							{steps.map((step, index) => (
-								<div
-									key={index}
-									className="h-screen flex flex-col justify-center items-center p-4 sm:p-8"
-								>
-									<Card className="bg-[#F5EFE0] rounded-xl shadow-lg w-full max-w-sm sm:max-w-md md:max-w-lg">
-										<CardHeader className="p-4 sm:p-6">
-											<CardTitle className="text-lg sm:text-xl md:text-2xl text-[#2D3648] text-center">
-												{step.title}
-											</CardTitle>
-										</CardHeader>
-										<CardContent className="p-4 sm:p-6">
-											<div className="relative aspect-[9/16] sm:aspect-video md:aspect-[3/4] max-h-[60vh] mx-auto rounded-lg overflow-hidden">
-												<img
-													src={step.image}
-													alt={step.title}
-													className="w-full h-full object-contain"
-												/>
-											</div>
-										</CardContent>
-									</Card>
-								</div>
-							))}
-						</motion.div>
-					</div>
-				</div>
-			</div>
-		</section>
-	);
+          <div className="flex flex-col items-center mx-4">
+            <div className="flex-grow border-l border-2 border-gray-400 w-px" />
+            <span className="my-2 text-xs text-muted-foreground uppercase">
+              <CircleDot className="text-blue-500 w-10 h-10"/>
+            </span>
+            <div className="flex-grow border-l border-2 border-gray-400 w-px" />
+          </div>
+
+          {/* Right Panel */}
+          <div className="w-2/3 relative h-full overflow-hidden">
+            <motion.div style={{ y }} className="absolute top-0 left-0 w-full">
+              {steps.map((step, index) => (
+                <div
+                  key={index}
+                  className="h-screen flex flex-col justify-center items-center p-4 sm:p-8"
+                >
+                  <Card className="bg-[#F5EFE0] rounded-xl shadow-lg w-full max-w-sm sm:max-w-md md:max-w-lg">
+                    <CardHeader className="p-4 sm:p-6">
+                      <CardTitle className="text-lg sm:text-xl md:text-2xl text-[#2D3648] text-center">
+                        {step.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="relative aspect-[9/16] sm:aspect-video md:aspect-[3/4] max-h-[60vh] mx-auto rounded-lg overflow-hidden">
+                        <img
+                          src={step.image}
+                          alt={step.title}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
