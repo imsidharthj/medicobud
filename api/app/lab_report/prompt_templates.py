@@ -4,13 +4,13 @@ Contains specialized prompt templates for medical lab report analysis
 """
 
 import json
+import re
 from typing import Dict, Any, List
 from langchain_core.prompts import ChatPromptTemplate
 
 class MedicalPromptTemplates:
     """Medical-specific prompt templates for LLM analysis"""
     
-    # Token-optimized lab analysis template with comprehensive response format
     LAB_ANALYSIS_TEMPLATE = """You are MedicoBud, a medical AI for lab report analysis. Your response MUST be a single, valid JSON object, without any markdown formatting like ```json.
 
 ## INTERNAL PROCESSING INSTRUCTIONS (DO NOT OUTPUT THESE STEPS):
@@ -88,35 +88,6 @@ Analysis: {lab_analysis}
 7.  **MANDATORY**: Every test parsed MUST appear as an object in the `values` array.
 8.  **Output**: Ensure the entire output is a single valid JSON object and nothing else. Do not wrap it in markdown."""
 
-    # Compact trend analysis template  
-    TREND_ANALYSIS_TEMPLATE = """**TREND ANALYSIS:**
-
-Current: {current_results}
-Previous: {previous_results}
-Period: {time_period}
-
-**FORMAT:**
-**CHANGES:** [Test]: [Direction] [Rate] | [Test]: [Direction] [Rate]
-**PATTERNS:** [Key observations]
-**MONITORING:** [Frequency recommendations]
-
-**Rules:** Use ↑↓→ arrows, keep concise."""
-
-    # Compact medication interaction template
-    MEDICATION_INTERACTION_TEMPLATE = """**MEDICATION ANALYSIS:**
-
-Labs: {lab_results}
-Meds: {medications}
-
-**FORMAT:**
-**EFFECTS:** [Med]: affects [Test] | [Med]: affects [Test] 
-**MONITORING:** [Tests to watch]
-**TIMING:** [Lab timing recommendations]
-
-**Rules:** Focus on clinically significant interactions only."""
-    
-    # Removed CRITICAL_VALUES_TEMPLATE as it's now integrated
-
 class PromptManager:
     """Manages prompt templates and provides formatted prompts"""
     
@@ -125,35 +96,12 @@ class PromptManager:
     
     def get_lab_analysis_prompt(self, lab_data: Dict[str, Any]) -> ChatPromptTemplate:
         """Get formatted lab analysis prompt"""
-        # The prompt will now implicitly handle critical values
-        prompt = ChatPromptTemplate.from_template(
-            self.templates.LAB_ANALYSIS_TEMPLATE
-        )
-        return prompt
-    
-    # Removed get_critical_values_prompt as it's no longer needed
-
-    def get_trend_analysis_prompt(self, current_results: Dict[str, Any], 
-                                 previous_results: Dict[str, Any] = None,
-                                 time_period: str = "Not specified") -> ChatPromptTemplate:
-        """Get formatted trend analysis prompt"""
-        prompt = ChatPromptTemplate.from_template(
-            self.templates.TREND_ANALYSIS_TEMPLATE
-        )
-        return prompt
-    
-    def get_medication_interaction_prompt(self, lab_results: Dict[str, Any],
-                                        medications: List[str] = None) -> ChatPromptTemplate:
-        """Get formatted medication interaction prompt"""
-        prompt = ChatPromptTemplate.from_template(
-            self.templates.MEDICATION_INTERACTION_TEMPLATE
-        )
-        return prompt
+        return ChatPromptTemplate.from_template(self.templates.LAB_ANALYSIS_TEMPLATE)
     
     def format_lab_data_for_prompt(self, lab_data: Dict[str, Any]) -> Dict[str, str]:
         """Format lab data for use in prompts"""
         return {
-            "lab_text": lab_data.get("raw_text", "")[:2000],  # Limit text length
+            "lab_text": lab_data.get("raw_text", "")[:2000],
             "medical_entities": self._format_entities(lab_data.get("medical_entities", [])),
             "lab_values": self._format_lab_values(lab_data.get("lab_values", {})),
             "quantities": ", ".join(lab_data.get("quantities", [])),
@@ -161,13 +109,12 @@ class PromptManager:
         }
     
     def _format_entities(self, entities: List[Dict[str, Any]]) -> str:
-        """Format medical entities for prompt display - compact version"""
+        """Format medical entities for prompt display"""
         if not entities:
             return "None"
         
-        # Group by category for more compact display
         categories = {}
-        for entity in entities[:10]:  # Reduced from 20 to 10
+        for entity in entities[:10]:
             category = entity.get('category', 'Other')
             if category not in categories:
                 categories[category] = []
@@ -175,19 +122,19 @@ class PromptManager:
         
         formatted = []
         for category, texts in categories.items():
-            formatted.append(f"{category}: {', '.join(texts[:3])}")  # Max 3 per category
+            formatted.append(f"{category}: {', '.join(texts[:3])}")
         
         return " | ".join(formatted)
     
     def _format_lab_values(self, lab_values: Dict[str, Any]) -> str:
-        """Format lab values for prompt display - compact version"""
+        """Format lab values for prompt display"""
         if not lab_values:
             return "None"
         
         formatted = []
-        for test_name, values in list(lab_values.items()):  # Max 8 tests
+        for test_name, values in list(lab_values.items()):
             if isinstance(values, list) and values:
-                value, unit = values[0]  # Take first value only
+                value, unit = values[0]
                 formatted.append(f"{test_name}: {value} {unit}")
             else:
                 formatted.append(f"{test_name}: {values}")
@@ -195,131 +142,57 @@ class PromptManager:
         return " | ".join(formatted)
     
     def _format_lab_analysis(self, lab_analysis: Dict[str, Any]) -> str:
-        """Format lab analysis results for prompt display - compact version"""
+        """Format lab analysis results for prompt display"""
         if not lab_analysis:
             return "None"
         
-        # Count totals for compact display
         normal_count = len(lab_analysis.get("normal_values", []))
         abnormal_count = len(lab_analysis.get("abnormal_values", []))
         critical_count = len(lab_analysis.get("critical_values", []))
         
         summary = f"Normal: {normal_count}, Abnormal: {abnormal_count}, Critical: {critical_count}"
         
-        # Add critical details if any
         critical = lab_analysis.get("critical_values", [])
         if critical:
             critical_details = []
-            for item in critical[:3]:  # Max 3 critical items
+            for item in critical[:3]:
                 critical_details.append(f"{item.get('test', 'N/A')}: {item.get('value', 'N/A')}")
             summary += f" | CRITICAL: {', '.join(critical_details)}"
         
         return summary
     
-    def create_custom_prompt(self, template: str, variables: Dict[str, Any]) -> ChatPromptTemplate:
-        """Create a custom prompt template"""
-        return ChatPromptTemplate.from_template(template)
-    
-    def get_available_templates(self) -> List[str]:
-        """Get list of available template names"""
-        return [
-            "LAB_ANALYSIS_TEMPLATE",
-            "TREND_ANALYSIS_TEMPLATE",
-            "MEDICATION_INTERACTION_TEMPLATE"
-        ]
-    
     def validate_prompt_data(self, lab_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and clean lab data for prompts"""
         validated_data = {
-            "raw_text": str(lab_data.get("raw_text", ""))[:1500],  # Further reduced for token optimization
+            "raw_text": str(lab_data.get("raw_text", ""))[:1500],
             "medical_entities": lab_data.get("medical_entities", []),
             "lab_values": lab_data.get("lab_values", {}),
             "quantities": lab_data.get("quantities", []),
-            "spacy_entities": lab_data.get("spacy_entities", []),
-            "lab_analysis": lab_data.get("lab_analysis", {}),
-            "processing_info": lab_data.get("processing_info", {})
+            "lab_analysis": lab_data.get("lab_analysis", {})
         }
         
-        # Ensure medical_entities is a list
         if not isinstance(validated_data["medical_entities"], list):
             validated_data["medical_entities"] = []
         
-        # Ensure lab_values is a dict
         if not isinstance(validated_data["lab_values"], dict):
             validated_data["lab_values"] = {}
         
-        # Ensure quantities is a list
         if not isinstance(validated_data["quantities"], list):
             validated_data["quantities"] = []
         
         return validated_data
     
     def parse_compact_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse the JSON response from the LLM into a dictionary."""
-        import re
-        
-        # Clean the response text: remove markdown and find the JSON object
+        """Parse the JSON response from the LLM into a dictionary"""
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```|({[\s\S]*})', response_text)
         
         if not json_match:
-            print(f"Error: Could not find a JSON object in the response: {response_text}")
-            return {{"error": "Failed to parse LLM response", "raw_response": response_text}}
+            return {"error": "Failed to parse LLM response", "raw_response": response_text}
 
-        # Extract the JSON string from the first available match group
         json_str = json_match.group(1) or json_match.group(2)
         
         try:
-            # Attempt to parse the JSON string
             return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            print(f"Error: Failed to decode JSON: {e}")
-            print(f"Invalid JSON string: {json_str}")
-            return {{"error": "Invalid JSON format from LLM", "raw_response": json_str}}
-
-# Usage example and testing
-if __name__ == "__main__":
-    prompt_manager = PromptManager()
-    
-    # Test data
-    sample_lab_data = {
-        "raw_text": "Glucose: 145 mg/dL, Hemoglobin: 12.5 g/dL, Cholesterol: 220 mg/dL",
-        "medical_entities": [
-            {"text": "glucose", "category": "lab_test", "confidence": 0.95},
-            {"text": "hemoglobin", "category": "lab_test", "confidence": 0.92}
-        ],
-        "lab_values": {
-            "glucose": [("145", "mg/dL")],
-            "hemoglobin": [("12.5", "g/dL")],
-            "cholesterol": [("220", "mg/dL")]
-        },
-        "quantities": ["145", "12.5", "220"],
-        "lab_analysis": {
-            "normal_values": [{"test": "hemoglobin", "value": 12.5, "unit": "g/dL", "status": "NORMAL"}],
-            "abnormal_values": [
-                {"test": "glucose", "value": 145, "unit": "mg/dL", "status": "HIGH"},
-                {"test": "cholesterol", "value": 220, "unit": "mg/dL", "status": "HIGH"}
-            ],
-            "critical_values": [] # Example: if glucose was 45, it would be here
-        }
-    }
-    
-    print("🧪 Testing Prompt Templates...")
-    
-    # Test lab analysis prompt (now includes critical values logic)
-    formatted_data = prompt_manager.format_lab_data_for_prompt(sample_lab_data)
-    lab_prompt_messages = prompt_manager.get_lab_analysis_prompt(sample_lab_data).format_prompt(**formatted_data).to_messages()
-    
-    print("✅ Lab analysis prompt created (now includes critical values logic)")
-    print(f"✅ Formatted data keys: {list(formatted_data.keys())}")
-    
-    # Test available templates
-    templates = prompt_manager.get_available_templates()
-    print(f"✅ Available templates: {len(templates)} - 'CRITICAL_VALUES_TEMPLATE' should be gone")
-    
-    # You can print the generated prompt to inspect it
-    # print("\n--- Generated Lab Analysis Prompt ---")
-    # for message in lab_prompt_messages:
-    #    print(f"Role: {message.type}\nContent: {message.content}\n---")
-
-    print("\n🎯 Prompt templates module ready for consolidated analysis!")
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON format from LLM", "raw_response": json_str}
 
