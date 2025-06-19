@@ -11,7 +11,7 @@ class MedicalPromptTemplates:
     """Medical-specific prompt templates for LLM analysis"""
     
     # Token-optimized lab analysis template with comprehensive response format
-    LAB_ANALYSIS_TEMPLATE = """You are MedicoBud, a medical AI for lab report analysis.
+    LAB_ANALYSIS_TEMPLATE = """You are MedicoBud, a medical AI for lab report analysis. Your response MUST be a single, valid JSON object, without any markdown formatting like ```json.
 
 ## INTERNAL PROCESSING INSTRUCTIONS (DO NOT OUTPUT THESE STEPS):
 
@@ -32,6 +32,7 @@ You will then parse every lab test, value, unit, and reference range—even thou
 - For each test you parsed in INTERPRETATION, you MUST include it in the VALUES section in REQUIRED FORMAT.
 - If you detect any likely parsing or OCR errors, exclude that value from analyse, and mention it in the SUMMARY as INTERPRETATION error in parentheses().
 - Your job is to tell the user whether ALL their lab values are normal or need medical attention.
+- For all values, you can infer the standard normal ranges independently based on commonly accepted clinical standards.
 
 ## Data:
 Text: {lab_text}
@@ -48,33 +49,44 @@ Analysis: {lab_analysis}
 - Ignore any random, non-medical text or OCR noise.
 - Use your full reasoning capability to deduce the correct values even if formatting is inconsistent.
 - Do not skip any values present in the text.
+- Your final output must be a single JSON object.
 
-## REQUIRED FORMAT (use EXACTLY this structure):
+## REQUIRED JSON FORMAT (use EXACTLY this structure):
+```json
+{{
+  "summary": "A brief, 1-2 sentence summary of the key findings.",
+  "values": [
+    {{
+      "test": "Name of the Lab Test",
+      "value": "Measured Value",
+      "unit": "Unit of Measurement",
+      "range": "Reference Range (e.g., '70-110')",
+      "status": "NORMAL | HIGH | LOW | CRITICAL"
+    }}
+  ],
+  "status": {{
+    "normal": 0,
+    "abnormal": 0,
+    "critical": 0
+  }},
+  "recommendations": {{
+    "lifestyle": "Specific, actionable lifestyle advice.",
+    "followUp": "Recommendations for follow-up tests and timing.",
+    "doctor": "Urgency and points to discuss with a doctor."
+  }}
+}}
+```
 
-**SUMMARY:** [1-2 sentences max]
-
-**VALUES:**
-[Test]: [Value] ([Range]) [Status] | [Test]: [Value] ([Range]) [Status]
-[CONTINUE FOR ALL PARSED VALUES - DO NOT LIMIT TO 8 TESTS]
-
-**STATUS:** Normal: X | Abnormal: Y | Critical: Z
-
-**RECOMMENDATIONS:**
-🏃 Lifestyle: [2-3 specific actions]
-🔬 Follow-up: [timing and tests]
-👨‍⚕️ Doctor: [urgency and discussion points]
-
-## Rules:
-1. **SUMMARY**: Max 2 sentences, key findings only
-2. **VALUES**: Pipe-separated format, INCLUDE ALL TESTS FROM INTERPRETATION, use emojis:
-   - ✅ NORMAL | ⚠️ HIGH/LOW | 🚨 CRITICAL
-3. **STATUS**: Count accurately from ALL values in VALUES section
-4. **RECOMMENDATIONS**: Max 2 bullet points per section
-5. Units: Use mg/dL, g/dL, K/uL, mEq/L (standardized)
-6. Critical thresholds: Glucose <50/>400, Hemoglobin <7/>20, WBC <1/>50, Platelets <20/>1000, K+ <2.5/>6.0, Na+ <120/>160
-7. **MANDATORY**: Every test parsed in INTERPRETATION MUST appear in the VALUES section
-
-**Language**: Patient-friendly, avoid diagnosis terms, use "may suggest" not "indicates"."""
+## Rules for JSON content:
+1.  **summary**: Max 2 sentences, summarizing key findings.
+2.  **values**: An array of objects. INCLUDE ALL TESTS YOU PARSE.
+    -   `status` must be one of: "NORMAL", "HIGH", "LOW", "CRITICAL".
+3.  **status**: An object with the integer counts of normal, abnormal, and critical values. These counts must match the `values` array.
+4.  **recommendations**: An object with specific, actionable advice for each category.
+5.  **Units**: Standardize units in the `unit` field (e.g., mg/dL, g/dL, K/uL, mEq/L).
+6.  **Critical thresholds**: Use these to determine "CRITICAL" status: Glucose <50/>400, Hemoglobin <7/>20, WBC <1/>50, Platelets <20/>1000, K+ <2.5/>6.0, Na+ <120/>160.
+7.  **MANDATORY**: Every test parsed MUST appear as an object in the `values` array.
+8.  **Output**: Ensure the entire output is a single valid JSON object and nothing else. Do not wrap it in markdown."""
 
     # Compact trend analysis template  
     TREND_ANALYSIS_TEMPLATE = """**TREND ANALYSIS:**
@@ -243,78 +255,26 @@ class PromptManager:
         return validated_data
     
     def parse_compact_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse the compact response format into structured data for UI"""
+        """Parse the JSON response from the LLM into a dictionary."""
         import re
         
-        parsed = {
-            "summary": "",
-            "values": [],
-            "status": {"normal": 0, "abnormal": 0, "critical": 0},
-            "recommendations": {
-                "lifestyle": "",
-                "followup": "",
-                "doctor": ""
-            }
-        }
+        # Clean the response text: remove markdown and find the JSON object
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```|({[\s\S]*})', response_text)
         
-        # Extract summary
-        summary_match = re.search(r'\*\*SUMMARY:\*\*\s*(.+)', response_text)
-        if summary_match:
-            parsed["summary"] = summary_match.group(1).strip()
+        if not json_match:
+            print(f"Error: Could not find a JSON object in the response: {response_text}")
+            return {{"error": "Failed to parse LLM response", "raw_response": response_text}}
+
+        # Extract the JSON string from the first available match group
+        json_str = json_match.group(1) or json_match.group(2)
         
-        # Extract values (pipe-separated format)
-        values_match = re.search(r'\*\*VALUES:\*\*\s*(.+)', response_text)
-        if values_match:
-            values_line = values_match.group(1).strip()
-            # Split by | and parse each value
-            for value_item in values_line.split('|'):
-                value_item = value_item.strip()
-                if ':' in value_item:
-                    # Parse format: "Test: Value (Range) Status"
-                    test_match = re.match(r'([^:]+):\s*([^(]+)\s*\(([^)]+)\)\s*(.*)', value_item)
-                    if test_match:
-                        test_name, value, range_info, status = test_match.groups()
-                        # Determine status from emoji or text
-                        if '🚨' in status or 'CRITICAL' in status:
-                            status_type = 'critical'
-                        elif '⚠️' in status or 'HIGH' in status or 'LOW' in status:
-                            status_type = 'abnormal'
-                        else:
-                            status_type = 'normal'
-                        
-                        parsed["values"].append({
-                            "test": test_name.strip(),
-                            "value": value.strip(),
-                            "range": range_info.strip(),
-                            "status": status_type,
-                            "display_status": status.strip()
-                        })
-        
-        # Extract status counts
-        status_match = re.search(r'\*\*STATUS:\*\*\s*Normal:\s*(\d+)\s*\|\s*Abnormal:\s*(\d+)\s*\|\s*Critical:\s*(\d+)', response_text)
-        if status_match:
-            parsed["status"]["normal"] = int(status_match.group(1))
-            parsed["status"]["abnormal"] = int(status_match.group(2))
-            parsed["status"]["critical"] = int(status_match.group(3))
-        
-        # Extract recommendations
-        recs_section = re.search(r'\*\*RECOMMENDATIONS:\*\*\s*(.*?)(?:\*\*|$)', response_text, re.DOTALL)
-        if recs_section:
-            recs_text = recs_section.group(1)
-            
-            lifestyle_match = re.search(r'🏃\s*Lifestyle:\s*([^🔬👨‍⚕️]+)', recs_text)
-            if lifestyle_match:
-                parsed["recommendations"]["lifestyle"] = lifestyle_match.group(1).strip()
-            
-            followup_match = re.search(r'🔬\s*Follow-up:\s*([^🏃👨‍⚕️]+)', recs_text)
-            if followup_match:
-                parsed["recommendations"]["followup"] = followup_match.group(1).strip()
-            
-            doctor_match = re.search(r'👨‍⚕️\s*Doctor:\s*([^🏃🔬]+)', recs_text)
-            if doctor_match:
-                parsed["recommendations"]["doctor"] = doctor_match.group(1).strip()
-        
-        return parsed
+        try:
+            # Attempt to parse the JSON string
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Error: Failed to decode JSON: {e}")
+            print(f"Invalid JSON string: {json_str}")
+            return {{"error": "Invalid JSON format from LLM", "raw_response": json_str}}
 
 # Usage example and testing
 if __name__ == "__main__":
