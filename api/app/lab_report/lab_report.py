@@ -111,12 +111,15 @@ class LabReportAnalyzer:
             
             # Direct LLM analysis
             start_llm_time = datetime.now()
-            ai_analysis = self.llm_client.analyze_lab_report(lab_data)
+            ai_analysis_str = self.llm_client.analyze_lab_report(lab_data)
             llm_processing_time = (datetime.now() - start_llm_time).total_seconds()
             
+            # Parse the JSON response from the LLM
+            ai_analysis = self.prompt_manager.parse_compact_response(ai_analysis_str)
+
             # Create analysis result structure
             analysis_result = {
-                "success": True,
+                "success": "error" not in ai_analysis,
                 "raw_text": raw_text,
                 "ai_analysis": ai_analysis,
                 "processing_time": llm_processing_time,
@@ -204,11 +207,14 @@ class LabReportAnalyzer:
             }
             
             # Direct LLM analysis
-            ai_analysis = self.llm_client.analyze_lab_report(lab_data)
+            ai_analysis_str = self.llm_client.analyze_lab_report(lab_data)
             processing_time = (datetime.now() - start_time).total_seconds()
             
+            # Parse the JSON response
+            ai_analysis = self.prompt_manager.parse_compact_response(ai_analysis_str)
+
             result = {
-                "success": True,
+                "success": "error" not in ai_analysis,
                 "raw_text": text,
                 "ai_analysis": ai_analysis,
                 "processing_time": processing_time,
