@@ -21,6 +21,7 @@ class UserProfile(Base):
 
     doctor_visits = relationship("DoctorVisit", back_populates="user")
     sessions = relationship("Session", back_populates="user")
+    lab_records = relationship("LabRecords", back_populates="user")
 
 class DoctorVisit(Base):
     __tablename__ = "doctor_visits"
@@ -64,6 +65,16 @@ class LabReport(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     doctor_visit = relationship("DoctorVisit", back_populates="lab_reports")
+
+class LabRecords(Base):
+    __tablename__ = "lab_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, nullable=False)
+    email = Column(String, ForeignKey('user_profiles.email'), nullable=False)
+    values = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("UserProfile", back_populates="lab_records")
 
 class Session(Base):
     __tablename__ = "sessions"
