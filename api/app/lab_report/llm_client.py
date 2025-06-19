@@ -13,10 +13,10 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import ChatPromptTemplate
 
 # Local imports
 from .prompt_templates import PromptManager
-from .medical_extractor import MedicalEntityExtractor, SystemCapabilities
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class MedicalLLMClient:
         self.deepseek_model = "deepseek/deepseek-r1:free"
         self.deepseek_base_url = "https://openrouter.ai/api/v1"
         
-        # Initialize primary LLM (LiteLLM with Vertex AI Gemini)
+        # Initialize primary LLM (LiteLLM with Gemini)
         self.llm = self._initialize_litellm_llm(model, litellm_api_key)
         
         # Initialize fallback LLM (DeepSeek)
@@ -49,19 +49,11 @@ class MedicalLLMClient:
             logger.warning("DeepSeek fallback not available - DEEPSEEK_API_KEY not set")
     
     def _initialize_litellm_llm(self, model: str, api_key: str) -> ChatOpenAI:
-        """Initialize LiteLLM with Vertex AI Gemini model for medical-optimized settings"""
+        """Initialize LiteLLM with Gemini model for medical-optimized settings"""
         return ChatOpenAI(
             model=model,
             api_key=api_key,
             base_url=self.litellm_base_url,
-            temperature=0.1,  # Low temperature for medical accuracy
-            max_tokens=2500,  # Increased for comprehensive analysis
-            request_timeout=120,  # Longer timeout for complex analysis
-            max_retries=3,
-            default_headers={
-                "Content-Type": "application/json",
-                "User-Agent": "medicobud-lab-analyzer/1.0"
-            }
         )
     
     def _initialize_deepseek_llm(self) -> Optional[ChatOpenAI]:
@@ -86,11 +78,68 @@ class MedicalLLMClient:
     
     def _execute_with_fallback(self, chain_func, formatted_data: Dict[str, Any], operation: str) -> str:
         """Execute LLM operation with fallback to DeepSeek"""
-        # Try primary LLM (LiteLLM with Vertex AI Gemini) first
+        # Try primary LLM (LiteLLM with Gemini) first
         try:
-            logger.info(f"Attempting {operation} with LiteLLM (openai/gpt-4.1-mini)...")
-            chain = chain_func(self.llm)
-            response = chain.invoke(formatted_data)
+            logger.info(f"Attempting {operation} with LiteLLM ({self.model})...")
+            
+            # Try direct LLM invocation first to debug the response
+            try:
+                # Get the prompt template and format it
+                prompt_template = chain_func.__closure__[0].cell_contents if hasattr(chain_func, '__closure__') else None
+                if prompt_template is None:
+                    # Fallback to creating chain normally
+                    chain = chain_func(self.llm)
+                    response = chain.invoke(formatted_data)
+                else:
+                    # Direct invocation for better debugging
+                    messages = prompt_template.format_prompt(**formatted_data).to_messages()
+                    logger.info(f"🔍 Sending {len(messages)} messages to LLM")
+                    
+                    # Direct LLM call
+                    llm_response = self.llm.invoke(messages)
+                    logger.info(f"🔍 Raw LLM Response Type: {type(llm_response)}")
+                    
+                    # Debug the response content in detail
+                    logger.info(f"🔍 Response repr: {repr(llm_response)}")
+                    logger.info(f"🔍 Response content attribute: {repr(getattr(llm_response, 'content', 'NO_CONTENT_ATTR'))}")
+                    logger.info(f"🔍 Response additional_kwargs: {getattr(llm_response, 'additional_kwargs', 'NO_ADDITIONAL_KWARGS')}")
+                    logger.info(f"🔍 Response response_metadata: {getattr(llm_response, 'response_metadata', 'NO_RESPONSE_METADATA')}")
+                    
+                    # Extract content properly based on response type
+                    if hasattr(llm_response, 'content'):
+                        response = llm_response.content
+                        logger.info(f"🔍 Extracted content from .content attribute: '{response}' (length: {len(response) if response else 0})")
+                    elif hasattr(llm_response, 'text') and callable(getattr(llm_response, 'text')):
+                        response = llm_response.text()  # Call the method, don't access as property
+                        logger.info(f"🔍 Extracted content from .text() method: '{response}' (length: {len(response) if response else 0})")
+                    elif isinstance(llm_response, str):
+                        response = llm_response
+                        logger.info(f"🔍 Response is already a string: '{response}' (length: {len(response)})")
+                    else:
+                        logger.warning(f"🔍 Unknown response format, converting to string")
+                        response = str(llm_response)
+                    
+                    # Check if response is actually empty or just whitespace
+                    if response is None:
+                        logger.error(f"🔍 Response is None!")
+                        raise ValueError("Response is None from direct LiteLLM call")
+                    elif not response.strip():
+                        logger.error(f"🔍 Response is empty or whitespace only: '{response}' (length: {len(response)})")
+                        raise ValueError("Empty response from direct LiteLLM call")
+                    
+                    logger.info(f"✅ Direct LiteLLM call successful, response length: {len(response)}")
+                
+            except Exception as direct_error:
+                logger.warning(f"Direct invocation failed: {direct_error}, trying chain approach...")
+                chain = chain_func(self.llm)
+                response = chain.invoke(formatted_data)
+            
+            # Validate response is not empty
+            if not response or not response.strip():
+                logger.warning(f"LiteLLM returned empty response for {operation}")
+                logger.warning(f"Response type: {type(response)}, Response repr: {repr(response)}")
+                raise ValueError("Empty response from LiteLLM")
+            
             logger.info(f"✅ {operation} completed with LiteLLM")
             return response
             
@@ -103,6 +152,12 @@ class MedicalLLMClient:
                     logger.info(f"Attempting {operation} with DeepSeek fallback...")
                     chain = chain_func(self.fallback_llm)
                     response = chain.invoke(formatted_data)
+                    
+                    # Validate fallback response is not empty
+                    if not response or not response.strip():
+                        logger.warning(f"DeepSeek also returned empty response for {operation}")
+                        raise ValueError("Empty response from DeepSeek fallback")
+                    
                     logger.info(f"✅ {operation} completed with DeepSeek fallback")
                     return f"[Analyzed with DeepSeek fallback]\n\n{response}"
                     
@@ -116,13 +171,13 @@ class MedicalLLMClient:
                                                    f"LiteLLM failed: {litellm_error}. DeepSeek fallback not configured.")
     
     def analyze_lab_report(self, lab_data: Dict[str, Any]) -> str:
-        """Comprehensive lab report analysis (now includes critical values) using specialized medical prompts with fallback"""
+        """Comprehensive lab report analysis with direct response handling to fix LiteLLM parsing"""
         try:
             # Validate and format lab data
             validated_data = self.prompt_manager.validate_prompt_data(lab_data)
             formatted_data = self.prompt_manager.format_lab_data_for_prompt(validated_data)
             
-            # Get lab analysis prompt (this now implicitly handles critical values)
+            # Get lab analysis prompt
             prompt_template = self.prompt_manager.get_lab_analysis_prompt(validated_data)
             
             # 🔍 PIPELINE TRACKING 3: LLM CLIENT DATA & PROMPT
@@ -130,50 +185,73 @@ class MedicalLLMClient:
             print("🔍 PIPELINE STEP 3: LLM CLIENT - DATA & PROMPT DETAILS")
             print("="*80)
             
-            # print("📋 Raw Lab Data Received by LLM Client:")
-            # print("-" * 50)
-            # for key, value in lab_data.items():
-            #     if key == "raw_text":
-            #         print(f"   • {key}: '{value[:100]}...'" if len(str(value)) > 100 else f"   • {key}: '{value}'")
-            #     elif key == "parsed_table":
-            #         print(f"   • {key}: {len(value) if value else 0} rows")
-            #         if value:
-            #             print("     Sample rows:")
-            #             for i, row in enumerate(value[:3]):
-            #                 print(f"       {i+1}. {row}")
-            #             if len(value) > 3:
-            #                 print(f"       ... and {len(value) - 3} more rows")
-            #     else:
-            #         print(f"   • {key}: {value}")
-            
-            # print("\n📝 Validated & Formatted Data for Prompt:")
-            # print("-" * 50)
-            # for key, value in formatted_data.items():
-            #     print(f"   • {key}: {value[:200]}..." if len(str(value)) > 200 else f"   • {key}: {value}")
-            
-            print("\n🤖 Full Prompt Template:")
+            print("\n🤖 Formatted Prompt Data:")
             print("-" * 50)
-            # Get the actual prompt text by formatting it with the data
-            try:
-                formatted_prompt = prompt_template.format_prompt(**formatted_data)
-                prompt_text = formatted_prompt.to_string()
-                print(prompt_text)
-            except Exception as prompt_error:
-                print(f"Error formatting prompt: {prompt_error}")
-                print("Raw prompt template structure:", prompt_template)
+            for key, value in formatted_data.items():
+                print(f"   • {key}: {str(value)[:100]}..." if len(str(value)) > 100 else f"   • {key}: {value}")
             
             print("-" * 50)
             print("🚀 Sending to LLM...")
             print("="*80 + "\n")
             
-            # Define chain function
-            def create_chain(llm):
-                return prompt_template | llm | StrOutputParser()
-            
             logger.info("Starting comprehensive lab analysis (including critical values assessment)...")
             start_time = datetime.now()
             
-            response = self._execute_with_fallback(create_chain, formatted_data, "comprehensive lab analysis")
+            # Try direct approach first (bypass StrOutputParser)
+            try:
+                # Format the prompt messages
+                messages = prompt_template.format_prompt(**formatted_data).to_messages()
+                logger.info(f"🔍 Sending {len(messages)} messages to LiteLLM")
+                
+                # Direct LLM call
+                llm_response = self.llm.invoke(messages)
+                logger.info(f"🔍 Raw LLM Response Type: {type(llm_response)}")
+                
+                # Extract content properly based on response type
+                if hasattr(llm_response, 'content'):
+                    response = llm_response.content
+                    logger.info(f"🔍 Extracted content from .content attribute")
+                elif hasattr(llm_response, 'text') and callable(getattr(llm_response, 'text')):
+                    response = llm_response.text()  # Call the method, don't access as property
+                    logger.info(f"🔍 Extracted content from .text() method")
+                elif isinstance(llm_response, str):
+                    response = llm_response
+                    logger.info(f"🔍 Response is already a string")
+                else:
+                    logger.warning(f"🔍 Unknown response format, converting to string")
+                    response = str(llm_response)
+                
+                # Validate response
+                if not response or not response.strip():
+                    raise ValueError("Empty response from direct LiteLLM call")
+                
+                logger.info(f"✅ Direct LiteLLM call successful, response length: {len(response)}")
+                
+            except Exception as direct_error:
+                logger.warning(f"Direct LiteLLM call failed: {direct_error}")
+                
+                # Fallback to DeepSeek if available
+                if self.fallback_llm:
+                    logger.info("Attempting with DeepSeek fallback...")
+                    try:
+                        # Use chain approach for DeepSeek (it usually works fine)
+                        chain = prompt_template | self.fallback_llm | StrOutputParser()
+                        response = chain.invoke(formatted_data)
+                        
+                        if not response or not response.strip():
+                            raise ValueError("Empty response from DeepSeek")
+                        
+                        logger.info(f"✅ DeepSeek fallback successful")
+                        response = f"[Analyzed with DeepSeek fallback]\n\n{response}"
+                        
+                    except Exception as deepseek_error:
+                        logger.error(f"DeepSeek fallback also failed: {deepseek_error}")
+                        return self._generate_error_fallback(formatted_data, "comprehensive lab analysis", 
+                                                           f"Both LiteLLM ({direct_error}) and DeepSeek ({deepseek_error}) failed")
+                else:
+                    logger.error("No fallback available")
+                    return self._generate_error_fallback(formatted_data, "comprehensive lab analysis", 
+                                                       f"LiteLLM failed: {direct_error}. DeepSeek fallback not configured.")
             
             processing_time = (datetime.now() - start_time).total_seconds()
             logger.info(f"Comprehensive lab analysis completed in {processing_time:.2f} seconds")
@@ -182,6 +260,11 @@ class MedicalLLMClient:
             print("\n" + "="*80)
             print("🔍 PIPELINE STEP 4: LLM RESPONSE")
             print("="*80)
+            print(f"🤖 LLM Response Length: {len(response)} characters")
+            print("🤖 LLM Response Preview (first 300 chars):")
+            print("-" * 50)
+            print(response[:300] + ("..." if len(response) > 300 else ""))
+            print("-" * 50)
             print("🤖 Full LLM Response:")
             print(response)
             print("="*80 + "\n")
@@ -189,7 +272,7 @@ class MedicalLLMClient:
             return response
             
         except Exception as e:
-            logger.error(f"Lab analysis failed completely: {e}", exc_info=True) # Added exc_info for detailed traceback
+            logger.error(f"Lab analysis failed completely: {e}", exc_info=True)
             return self._generate_fallback_analysis(lab_data, str(e))
     
     # Removed check_critical_values method as it's now integrated
@@ -329,7 +412,7 @@ class MedicalLLMClient:
             "primary_llm": {
                 "model": self.model,
                 "available": True,  # We can't test without making a call
-                "provider": "LiteLLM (openai/gpt-4.1-mini)",
+                "provider": f"LiteLLM ({self.model})",
                 "base_url": self.litellm_base_url
             },
             "fallback_llm": {
@@ -341,179 +424,8 @@ class MedicalLLMClient:
             "fallback_strategy": "DeepSeek via OpenRouter with custom headers"
         }
 
-# Update the LabReportAnalyzer class to handle the new LiteLLM system
-class LabReportAnalyzer:
-    """Main lab report analysis system integrating all components with LLM fallback"""
-    
-    def __init__(self, litellm_api_key: str):
-        # Initialize system capabilities
-        self.system_caps = SystemCapabilities()
-        
-        # Initialize components
-        self.entity_extractor = MedicalEntityExtractor(self.system_caps)
-        self.llm_client = MedicalLLMClient(litellm_api_key)
-        
-        logger.info(f"Lab Report Analyzer initialized with {self.system_caps.device.upper()} processing")
-        
-        # Log LLM system status
-        llm_status = self.llm_client.get_system_status()
-        logger.info(f"Primary LLM: {llm_status['primary_llm']['provider']} ({llm_status['primary_llm']['model']})")
-        if llm_status['fallback_llm']['available']:
-            logger.info(f"Fallback LLM: {llm_status['fallback_llm']['provider']} ({llm_status['fallback_llm']['model']})")
-        else:
-            logger.warning("Fallback LLM not available - set DEEPSEEK_API_KEY for better reliability")
-    
-    def analyze_extracted_data(self, extracted_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze already extracted lab data (for text-only analysis) with fallback support"""
-        start_time = datetime.now()
-        
-        try:
-            # Step 1: Medical Entity Extraction
-            logger.info("Extracting medical entities...")
-            entities = self.entity_extractor.extract_entities(extracted_data.get("raw_text", ""))
-            
-            # Step 2: Lab Values Analysis (still needed for counts and structured data for prompt)
-            logger.info("Analyzing lab values...")
-            lab_analysis = self.entity_extractor.analyze_lab_values(entities["lab_values"])
-            
-            # Step 3: Prepare comprehensive lab data
-            lab_data = {
-                "raw_text": extracted_data.get("raw_text", ""),
-                "medical_entities": entities["medical_entities"],
-                "lab_values": entities["lab_values"],
-                "quantities": entities["quantities"],
-                "spacy_entities": entities["spacy_entities"],
-                "lab_analysis": lab_analysis, # This includes normal/abnormal/critical counts
-                "processing_info": entities["processing_info"]
-            }
-            
-            # Step 4: LLM Analysis (now a SINGLE call that includes critical values assessment)
-            logger.info("Performing comprehensive LLM analysis (including critical values assessment)...")
-            analysis = self.llm_client.analyze_lab_report(lab_data)
-            
-            processing_time = (datetime.now() - start_time).total_seconds()
-            
-            # Include LLM system status in response
-            llm_status = self.llm_client.get_system_status()
-            
-            return {
-                "success": True,
-                "raw_text": extracted_data.get("raw_text", ""),
-                "extracted_entities": entities,
-                "lab_analysis": lab_analysis, # Still useful for raw counts
-                "ai_analysis": analysis, # This now contains the combined analysis including critical assessment
-                "processing_time": processing_time,
-                "system_info": {
-                    "device_used": self.system_caps.device,
-                    "gpu_available": self.system_caps.has_gpu,
-                    "model_info": entities["processing_info"],
-                    "llm_status": llm_status
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Analysis failed: {e}", exc_info=True) # Added exc_info for detailed traceback
-            return {
-                "success": False,
-                "error": str(e),
-                "raw_text": extracted_data.get("raw_text", ""),
-                "processing_time": (datetime.now() - start_time).total_seconds(),
-                "system_info": {
-                    "llm_status": self.llm_client.get_system_status()
-                }
-            }
-    
-    def analyze_text_only(self, text: str) -> Dict[str, Any]:
-        """Analyze lab report from text input (skip OCR) with fallback support"""
-        return self.analyze_extracted_data({"raw_text": text})
-    
-    def analyze_trends(self, current_data: Dict[str, Any], 
-                      previous_data: Dict[str, Any] = None,
-                      time_period: str = "Not specified") -> str:
-        """Analyze trends between lab reports with fallback support"""
-        return self.llm_client.analyze_trends(current_data, previous_data, time_period)
-    
-    def analyze_with_medications(self, lab_data: Dict[str, Any], 
-                               medications: list = None) -> str:
-        """Analyze lab results considering medication effects with fallback support"""
-        return self.llm_client.analyze_medication_interactions(lab_data, medications)
-    
-    def get_system_info(self) -> Dict[str, Any]:
-        """Get system capabilities and model information including LLM fallback status"""
-        llm_status = self.llm_client.get_system_status()
-        
-        # Determine biomedical_ner status based on medcat availability
-        biomedical_ner_available = self.entity_extractor.medcat is not None
-
-        return {
-            "gpu_available": self.system_caps.has_gpu,
-            "device": self.system_caps.device,
-            "gpu_memory_gb": self.system_caps.gpu_memory,
-            "optimal_batch_size": self.system_caps.get_optimal_batch_size(),
-            "models_loaded": {
-                "spacy": self.entity_extractor.nlp is not None,
-                "biomedical_ner": biomedical_ner_available, # Reflects MedCAT status
-                "llm_model": self.llm_client is not None
-            },
-            "model_strategy": {
-                "primary_ner": "MedCAT" if biomedical_ner_available else "Regex Fallback",
-                "llm_provider": self.llm_client.model,
-                "fallback_llm_provider": self.llm_client.deepseek_model if self.llm_client.fallback_llm else "None"
-            },
-            "llm_system": llm_status
-        }
-    
-    def validate_setup(self) -> Dict[str, Any]:
-        """Validate system setup including LLM fallback configuration"""
-        validation = {
-            "overall_status": "✅ Ready",
-            "issues": [],
-            "warnings": [],
-            "recommendations": []
-        }
-        
-        # Check LLM setup
-        llm_status = self.llm_client.get_system_status()
-        
-        if not llm_status['fallback_llm']['configured']:
-            validation["warnings"].append("DeepSeek fallback not configured - only LiteLLM will be used")
-            validation["recommendations"].append("Set DEEPSEEK_API_KEY environment variable for better reliability")
-        
-        if not llm_status['fallback_llm']['available']:
-            validation["warnings"].append("DeepSeek fallback not available")
-        
-        # Check OCR setup (assuming OCRProcessor handles its own logging for availability)
-        # You can add more explicit checks here if needed, e.g., if self.ocr_processor.is_tesseract_available()
-        
-        # Check MedCat setup
-        if not self.entity_extractor.medcat:
-            validation["warnings"].append("MedCAT model not available - using regex fallback for medical entities.")
-            validation["recommendations"].append("Ensure SNOMED CT zip is correct and MedCAT can build/load its model.")
-        
-        # Check spaCy setup
-        if not self.entity_extractor.nlp:
-            validation["issues"].append("spaCy model 'en_core_web_sm' not loaded.")
-            validation["recommendations"].append("Install spaCy model: `python -m spacy download en_core_web_sm`.")
-        
-        # Check API key for LLM
-        if not self.llm_client.litellm_api_key or self.llm_client.litellm_api_key == "your-litellm-api-key-here":
-            validation["issues"].append("LiteLLM API key not configured.")
-            validation["recommendations"].append("Set `LITELLM_API_KEY` environment variable.")
-            validation["overall_status"] = "❌ Configuration Issues"
-        
-        # Check GPU setup
-        if not self.system_caps.has_gpu:
-            validation["warnings"].append("No GPU detected - using CPU processing (slower).")
-            validation["recommendations"].append("Consider GPU setup for faster processing.")
-        
-        if validation["issues"]:
-            validation["overall_status"] = "❌ Configuration Issues"
-        elif validation["warnings"]:
-            validation["overall_status"] = "⚠️  Ready with Warnings"
-        
-        return validation
-
-# Usage example and testing (unchanged)
+# Remove the LabReportAnalyzer class that still references medical_extractor
+# Usage example and testing
 if __name__ == "__main__":
     # Example usage with fallback testing - now using LITELLM_API_KEY
     api_key = os.getenv("LITELLM_API_KEY", "your-litellm-api-key-here")
@@ -522,11 +434,11 @@ if __name__ == "__main__":
         print("⚠️  Please set your LITELLM_API_KEY environment variable")
         exit(1)
     
-    analyzer = LabReportAnalyzer(api_key)
+    # Test with sample text using MedicalLLMClient directly
+    client = MedicalLLMClient(api_key)
     
     # Test system status
-    system_info = analyzer.get_system_info()
-    llm_status = system_info['llm_system']
+    llm_status = client.get_system_status()
     
     print(f"🔧 System Status:")
     print(f"   Primary LLM: {llm_status['primary_llm']['provider']} ({'✅ Available' if llm_status['primary_llm']['available'] else '❌ Unavailable'})")
@@ -551,26 +463,30 @@ if __name__ == "__main__":
     """
     
     print("\n🔬 Testing lab report analysis with LiteLLM + DeepSeek fallback support...")
-    result = analyzer.analyze_text_only(sample_text)
     
-    if result["success"]:
+    # Prepare lab data
+    lab_data = {
+        "raw_text": sample_text,
+        "medical_entities": [],
+        "lab_values": {},
+        "quantities": [],
+        "lab_analysis": {}
+    }
+    
+    try:
+        analysis = client.analyze_lab_report(lab_data)
         print("✅ Analysis completed successfully!")
-        print(f"⏱️  Processing time: {result['processing_time']:.2f} seconds")
-        print(f"🤖 LLM Status: {result['system_info']['llm_status']}")
         
-        analysis = result.get("ai_analysis", "")
         if "[Analyzed with DeepSeek fallback]" in analysis:
             print("🔄 Analysis completed using DeepSeek fallback")
         else:
             print("🎯 Analysis completed using primary LiteLLM model")
             
-        # You can now parse the 'analysis' string to extract critical findings
-        # based on the new template structure.
-        print("\n--- Combined AI Analysis (Example Snippet) ---")
+        print("\n--- AI Analysis (Example Snippet) ---")
         print(analysis[:500] + "..." if len(analysis) > 500 else analysis)
             
-    else:
-        print(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+    except Exception as e:
+        print(f"❌ Analysis failed: {str(e)}")
     
     print("\n🎯 LLM Client with LiteLLM + DeepSeek fallback ready for production!")
 
