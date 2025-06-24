@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 // import ProfileCompletionModal from './ProfileCompletionModal';
 import ProfileCompletionModal from './form/ProfileComplete-form';
 import { FASTAPI_URL } from './utils/api';
-import { tempUserService } from './utils/tempUser';
+import { tempUserService, FeatureType } from './utils/tempUser';
 
 interface AuthContextType {
   isProfileComplete: boolean;
@@ -11,6 +11,9 @@ interface AuthContextType {
   isTempUser: boolean;
   tempUserId: string | null;
   clearTempUserData: () => Promise<void>;
+  getTempUserStats: () => Promise<any>;
+  canUseFeature: (feature: FeatureType) => Promise<boolean>;
+  getRemainingLimits: () => Promise<Record<string, any>>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,34 +69,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearTempUserData = async () => {
-    await tempUserService.clearTempUser();
-    setIsTempUser(false);
-    setTempUserId(null);
+    try {
+      await tempUserService.clearTempUser();
+      setIsTempUser(false);
+      setTempUserId(null);
+      console.log("✅ Temporary user data cleared");
+    } catch (error) {
+      console.error("❌ Failed to clear temp user data:", error);
+    }
   };
 
-  // Initialize temporary user management
+  const getTempUserStats = async () => {
+    if (!isTempUser) return null;
+    try {
+      return await tempUserService.getTempUserStats();
+    } catch (error) {
+      console.error("Failed to get temp user stats:", error);
+      return null;
+    }
+  };
+
+  const canUseFeature = async (feature: FeatureType): Promise<boolean> => {
+    if (!isTempUser) return true; // Authenticated users have unlimited access
+    try {
+      return await tempUserService.canUseFeature(feature);
+    } catch (error) {
+      console.error(`Failed to check feature access for ${feature}:`, error);
+      return false;
+    }
+  };
+
+  const getRemainingLimits = async (): Promise<Record<string, any>> => {
+    if (!isTempUser) return {}; // Authenticated users have unlimited access
+    try {
+      return await tempUserService.getRemainingLimits();
+    } catch (error) {
+      console.error("Failed to get remaining limits:", error);
+      return {};
+    }
+  };
+
+  // Initialize temporary user management with new universal system
   useEffect(() => {
     const initializeTempUser = async () => {
       if (!isSignedIn) {
-        // User is not logged in, check if we have a temp user ID
-        const existingTempUserId = tempUserService.getTempUserId();
-        if (existingTempUserId) {
-          setTempUserId(existingTempUserId);
-          setIsTempUser(true);
-        } else {
-          // Create a new temporary user
-          try {
-            const newTempUserId = await tempUserService.createTempUser();
-            setTempUserId(newTempUserId);
+        // User is not logged in - initialize temp user system
+        try {
+          const existingTempUserId = await tempUserService.getTempUserId();
+          if (existingTempUserId) {
+            setTempUserId(existingTempUserId);
             setIsTempUser(true);
-            console.log("Created new temporary user:", newTempUserId);
-          } catch (error) {
-            console.error("Failed to create temporary user:", error);
+            console.log("🎯 Using existing temp user:", existingTempUserId);
+            
+            // Get user stats for debugging
+            const stats = await tempUserService.getTempUserStats();
+            console.log("📊 Temp user stats:", stats);
+          } else {
+            // This shouldn't happen as tempUserService auto-creates users
+            console.warn("⚠️ No temp user ID available after initialization");
           }
+        } catch (error) {
+          console.error("❌ Failed to initialize temporary user:", error);
         }
       } else {
-        // User is logged in, clear any temporary user data
+        // User is logged in - clear any temporary user data
         if (tempUserService.isTempUser()) {
+          console.log("🔄 User logged in, clearing temp user data");
           await clearTempUserData();
         }
         setIsTempUser(false);
@@ -123,7 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       checkProfileStatus, 
       isTempUser, 
       tempUserId,
-      clearTempUserData 
+      clearTempUserData,
+      getTempUserStats,
+      canUseFeature,
+      getRemainingLimits
     }}>
       {children}
       
