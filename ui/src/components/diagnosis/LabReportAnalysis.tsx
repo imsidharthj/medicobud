@@ -7,6 +7,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Upload, AlertCircle, CheckCircle, Loader2, Activity, Brain, Clock, AlertTriangle, Info, RefreshCw, Camera, FileImage, FileCheck } from 'lucide-react';
 import { FASTAPI_URL } from '@/utils/api';
+import { useAuth } from '@/authProvide';
+import { tempUserService, FeatureType } from '@/utils/tempUser';
 
 // --- NEW TYPE DEFINITIONS FOR JSON RESPONSE ---
 
@@ -60,6 +62,7 @@ interface LabReportAnalysisProps {
   };
   onBack?: () => void;
   isGuestMode?: boolean;
+  tempUserId?: string; // Add tempUserId prop
 }
 
 const STATUS_CONFIG = {
@@ -97,8 +100,15 @@ const ALLOWED_FILE_TYPES = [
 export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
   visitId,
   onBack,
+  isGuestMode = false,
+  tempUserId: propTempUserId
 }) => {
   const { user, isSignedIn } = useUser();
+  const { isTempUser, tempUserId: authTempUserId, canUseFeature, getRemainingLimits } = useAuth();
+  
+  // Use temp user system
+  const effectiveTempUserId = propTempUserId || authTempUserId;
+  const actualIsGuestMode = isGuestMode || isTempUser || !isSignedIn;
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -117,11 +127,18 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
     recommendations: string[];
   } | null>(null);
 
+  const [rateLimitInfo, setRateLimitInfo] = useState<{
+    canUse: boolean;
+    remainingDaily: number;
+    error?: string;
+  }>({ canUse: true, remainingDaily: 5 });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkSystemStatus();
+    initializeRateLimits();
   }, [visitId]);
 
   useEffect(() => {
@@ -131,6 +148,27 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
       }
     };
   }, []);
+
+  const initializeRateLimits = async () => {
+    if (actualIsGuestMode) {
+      try {
+        const canUse = await canUseFeature(FeatureType.LAB_REPORT);
+        const limits = await getRemainingLimits();
+        setRateLimitInfo({
+          canUse,
+          remainingDaily: limits.lab_report?.daily_remaining || 0
+        });
+      } catch (error) {
+        setRateLimitInfo({
+          canUse: false,
+          remainingDaily: 0,
+          error: error instanceof Error ? error.message : 'Rate limit check failed'
+        });
+      }
+    } else {
+      setRateLimitInfo({ canUse: true, remainingDaily: -1 }); // Unlimited for authenticated users
+    }
+  };
 
   const checkSystemStatus = async () => {
     try {
@@ -189,6 +227,12 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
       return;
     }
 
+    // Check rate limits before starting analysis
+    if (!rateLimitInfo.canUse) {
+      setError(rateLimitInfo.error || 'Daily lab report analysis limit reached. Please try again tomorrow.');
+      return;
+    }
+
     try {
       setIsAnalyzing(true);
       setError(null);
@@ -197,7 +241,15 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      if (isSignedIn && user) {
+      // Handle temp user vs authenticated user
+      if (actualIsGuestMode) {
+        // Use temp user system
+        const finalTempUserId = effectiveTempUserId || await tempUserService.getTempUserId();
+        if (finalTempUserId) {
+          formData.append('temp_user_id', finalTempUserId);
+        }
+      } else if (isSignedIn && user) {
+        // Authenticated user
         formData.append('user_id', user.id);
         const email = user.emailAddresses?.[0]?.emailAddress;
         if (email) {
@@ -212,10 +264,19 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to upload and analyze file');
+        throw new Error(errorData.detail || errorData.error || 'Failed to upload and analyze file');
       }
 
       const result = await response.json();
+      
+      // Update rate limit info if returned
+      if (result.remaining_daily !== undefined) {
+        setRateLimitInfo(prev => ({
+          ...prev,
+          remainingDaily: result.remaining_daily
+        }));
+      }
+
       setAnalysisResult(result);
       
     } catch (err) {
@@ -510,6 +571,30 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
     );
   };
 
+  const renderRateLimitWarning = () => {
+    if (!actualIsGuestMode) return null;
+    
+    return (
+      <Alert className="mb-4">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          {rateLimitInfo.canUse ? (
+            <>
+              <strong>Guest Mode:</strong> You have {rateLimitInfo.remainingDaily} lab report analyses remaining today.
+              {rateLimitInfo.remainingDaily <= 1 && (
+                <span className="text-orange-600"> Consider signing up for unlimited access.</span>
+              )}
+            </>
+          ) : (
+            <>
+              <strong>Daily Limit Reached:</strong> {rateLimitInfo.error || 'You have reached your daily lab report analysis limit. Please try again tomorrow or sign up for unlimited access.'}
+            </>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
+  };
+
   return (
     <div className="w-full max-w-6xl px-4 mx-auto space-y-6 py-10">
       {/* Header */}
@@ -519,6 +604,11 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
           <p className="mt-1 text-gray-600">
             Upload and analyze your medical lab reports with AI-powered insights
           </p>
+          {actualIsGuestMode && (
+            <p className="mt-1 text-sm text-blue-600">
+              Guest Mode • {rateLimitInfo.remainingDaily} analyses remaining today
+            </p>
+          )}
         </div>
         {onBack && (
           <Button variant="blueButton" onClick={onBack}>
@@ -526,6 +616,9 @@ export const LabReportAnalysis: React.FC<LabReportAnalysisProps> = ({
           </Button>
         )}
       </div>
+
+      {/* Rate Limit Warning */}
+      {renderRateLimitWarning()}
 
       {/* System Status Alert */}
       {systemStatus && systemStatus.recommendations.length > 0 && (

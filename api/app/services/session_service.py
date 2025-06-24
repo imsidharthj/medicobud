@@ -9,7 +9,8 @@ import json
 from app.utils import unique_symptoms, load_default_disease_data
 from thefuzz import process as fuzzy_process
 from fuzzywuzzy import fuzz
-from app.temp.temp_user import temp_user_manager
+from app.temp.temp_user import temp_user_manager, FeatureType
+from fastapi import Request
 
 class SessionService:
     def __init__(self, interview_service: InterviewService, diagnosis_service: DiagnosisService):
@@ -41,18 +42,36 @@ class SessionService:
         if not unique_symptoms:
             load_default_disease_data()
 
-    def start_session(self, db: Session, email: str = None, user_id: str = None, is_temp_user: bool = False) -> Dict[str, Any]:
-        session_id = str(uuid4())
+    def start_session(self, db: Session, email: str = None, user_id: str = None, 
+                     is_temp_user: bool = False, request: Request = None) -> Dict[str, Any]:
         
-        # Handle temporary users - check for guest emails or explicit temp user flag
-        if is_temp_user or (email and 'guest@medicobud.temp' in email) or (user_id and temp_user_manager.is_temp_user(user_id)):
-            if not user_id:
-                user_id = temp_user_manager.create_temp_user()
+        if (is_temp_user or 
+            (email and 'guest@medicobud.temp' in email) or 
+            (user_id and temp_user_manager.is_temp_user(user_id)) or
+            (not email and not user_id)):
             
-            # Create temporary session in memory
-            temp_user_manager.create_temp_session(session_id, user_id)
+            if not user_id and request:
+                user_id = temp_user_manager.create_temp_user_from_request(request)
+            elif not user_id:
+                user_id = temp_user_manager.create_anonymous_temp_user()
             
-            # Initialize session state for temp users
+            try:
+                access_info = temp_user_manager.check_feature_access(user_id, FeatureType.DIAGNOSIS)
+                session_id = temp_user_manager.create_feature_session(
+                    user_id, 
+                    FeatureType.DIAGNOSIS,
+                    {"step": "greeting", "symptoms": []}
+                )
+                
+                stats = temp_user_manager.get_temp_user_stats(user_id)
+                
+            except Exception as e:
+                return {
+                    "error": str(e), 
+                    "temp_user_id": user_id,
+                    "remaining_daily": 0
+                }
+            
             self.sessions[session_id] = {
                 "current_step": "greeting",
                 "person_type": None,
@@ -71,12 +90,31 @@ class SessionService:
             first_message = "How are you feeling today?"
             temp_user_manager.add_message_to_temp_session(session_id, "system", first_message)
             
-            return {"session_id": session_id, "message": first_message, "temp_user_id": user_id}
+            return {
+                "session_id": session_id, 
+                "message": first_message, 
+                "temp_user_id": user_id,
+                "remaining_daily": stats.get("remaining_limits", {}).get("diagnosis", {}).get("daily_remaining", 0),
+                "is_temporary": True
+            }
         
-        # Handle regular users (existing logic) - only if we have valid email/user_id
+        if email:
+            try:
+                user_exists = db.execute(
+                    text("SELECT email FROM user_profiles WHERE email = :email LIMIT 1"),
+                    {"email": email}
+                ).fetchone()
+                
+                if not user_exists:
+                    return self.start_session(db, email=None, user_id=None, is_temp_user=True)
+                    
+            except Exception:
+                return self.start_session(db, email=None, user_id=None, is_temp_user=True)
+        
         if not email and not user_id:
-            # If no email or user_id provided, treat as temp user
-            return self.start_session(db, email=None, user_id=None, is_temp_user=True)
+            return self.start_session(db, email=None, user_id=None, is_temp_user=True, request=request)
+        
+        session_id = str(uuid4())
         
         self.sessions[session_id] = {
             "current_step": "greeting",
@@ -110,10 +148,8 @@ class SessionService:
             db.commit()
             self._save_message(db, session_id, "system", first_message)
             db.commit()
-        except Exception as e:
+        except Exception:
             db.rollback()
-            print(f"Error creating database session: {str(e)}")
-            # Fall back to temporary session if database fails
             return self.start_session(db, email=None, user_id=None, is_temp_user=True)
         
         return {"session_id": session_id, "message": first_message}
@@ -281,9 +317,8 @@ class SessionService:
                 }
             )
             db.commit()
-        except Exception as e:
+        except Exception:
             db.rollback()
-            print(f"Error saving session summary: {str(e)}")
 
         try:
             db.execute(
@@ -291,9 +326,8 @@ class SessionService:
                 {"id": session_id, "time": datetime.now()}
             )
             db.commit()
-        except Exception as e:
+        except Exception:
             db.rollback()
-            print(f"Error updating session status: {str(e)}")
 
     def _format_diagnosis_results(self, diagnosis_data: Dict[str, Any]) -> str:
         primary_diagnosis = diagnosis_data.get("diagnosis", [])

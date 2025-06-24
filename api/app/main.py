@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Query, APIRouter, Request, status, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
@@ -13,8 +14,6 @@ import hmac
 import hashlib
 import json
 import os
-import time
-import threading
 from contextlib import asynccontextmanager
 from typing import Literal, Optional, List
 from .db import engine, Base, get_db
@@ -34,48 +33,29 @@ from .api_methods.labReport import router as lab_report_router
 from .lab_report.lab_report_api import router as lab_report_analysis_router
 from .api_methods.symptomSession import router as symptom_session_router
 from .routes.chat import router as chat_router
-from fastapi.staticfiles import StaticFiles
-# from .utils.temp_user import temp_user_manager
-from .temp.temp_user import TempUserManager
+from .temp.temp_user import temp_user_manager
+from .temp.temp_apis import router as temp_user_router
 
 load_dotenv()
 
-# Background task for cleanup
-def cleanup_temp_data():
-    """Background task to clean up expired temporary users and sessions"""
-    while True:
-        try:
-            temp_user_manager.cleanup_expired_data()
-            # Run cleanup every hour
-            time.sleep(3600)
-        except Exception as e:
-            print(f"Error in cleanup task: {e}")
-            time.sleep(3600)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print("Starting temporary user cleanup background task...")
-    cleanup_thread = threading.Thread(target=cleanup_temp_data, daemon=True)
-    cleanup_thread.start()
-    print("Temporary user system initialized")
-    
+    print("🚀 Medicobud API started")
     yield
-    
-    # Shutdown
-    print("Shutting down temporary user system...")
+    print("🛑 Medicobud API stopped")
 
-# Initialize FastAPI app with lifespan
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Medicobud API",
+    description="Universal Healthcare API with Redis-based temporary user management",
+    version="2.0.0",
+    lifespan=lifespan
+)
 
 UI_URL = os.getenv("UI_URL", "http://app.medicobud.com")
 ACTUAL_FRONTEND_ORIGIN = "https://medicobud.com"
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
-
-# Comprehensive CORS configuration for all possible origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -100,8 +80,9 @@ app.add_middleware(
         "svix-id",
         "svix-timestamp",
         "svix-signature",
+        "x-temp-user-id",
     ],
-    expose_headers=["Content-Type", "Authorization"],
+    expose_headers=["Content-Type", "Authorization", "x-temp-user-id"],
     max_age=86400,
 )
 
@@ -116,9 +97,10 @@ app.include_router(lab_report_router)
 app.include_router(lab_report_analysis_router)
 app.include_router(symptom_session_router)
 app.include_router(chat_router, prefix="/api", tags=["chat"])
+app.include_router(temp_user_router)
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def root():
-    return {"message": "This is the Diagnosis API."}
+    return {"message": "Medicobud API v2.0 - Universal Healthcare Platform"}

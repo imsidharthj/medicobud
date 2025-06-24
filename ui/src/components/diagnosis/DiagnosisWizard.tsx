@@ -12,6 +12,8 @@ import { FASTAPI_URL } from '@/utils/api';
 import DiagnosisResultFormatter, { formatDiagnosisResults } from './DiagnosisResultFormatter';
 import Autocomplete from '@/data/autocomplete';
 import LabReportAnalysis from './LabReportAnalysis';
+import { useAuth } from '@/authProvide';
+import { tempUserService, FeatureType } from '@/utils/tempUser';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
@@ -60,12 +62,14 @@ interface DiagnosisWizardProps {
 
 export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   userProfile: propUserProfile,
-  isGuestMode: propIsGuestMode = false, // Default to false if not provided
+  isGuestMode: propIsGuestMode = false,
 }) => {
   const { user, isSignedIn } = useUser();
+  const { isTempUser, tempUserId, canUseFeature, getRemainingLimits } = useAuth();
   const location = useLocation();
   const routeIsGuestMode = location.state?.isGuestMode === true;
-  const actualIsGuestMode = propIsGuestMode === true || routeIsGuestMode;
+  const actualIsGuestMode = propIsGuestMode === true || routeIsGuestMode || isTempUser;
+  
   const [effectiveSessionInfo, setEffectiveSessionInfo] = useState<{
     userId?: string;
     email?: string;
@@ -73,32 +77,14 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     age?: number;
     gender?: string;
     isGuest: boolean;
+    tempUserId?: string;
   }>({ isGuest: actualIsGuestMode });
 
-  useEffect(() => {
-    let userId, email, name, age, gender;
-    const currentIsGuest = propIsGuestMode === true || location.state?.isGuestMode === true;
-
-    if (currentIsGuest) {
-      userId = `guest_route_${Date.now()}`;
-      email = 'guest@medicobud.temp';
-      name = undefined;
-      age = undefined;
-      gender = undefined;
-    } else if (isSignedIn && user) {
-      userId = user.id;
-      email = user.emailAddresses?.[0]?.emailAddress;
-      name = propUserProfile?.name || user.fullName || user.firstName;
-      age = propUserProfile?.age;
-      gender = propUserProfile?.gender;
-    } else {
-      console.warn("DiagnosisWizard: User is not signed in and not in explicit guest mode. Treating as anonymous guest.");
-      userId = `guest_anon_${Date.now()}`;
-      email = 'guest-anon@medicobud.temp';
-      name = 'Anonymous';
-    }
-    setEffectiveSessionInfo({ userId, email, name: name ?? undefined, age, gender, isGuest: currentIsGuest });
-  }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile]);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{
+    canUse: boolean;
+    remainingDaily: number;
+    error?: string;
+  }>({ canUse: true, remainingDaily: 10 });
 
   const [sessionData, setSessionData] = useState<SessionData>({
     sessionId: undefined,
@@ -118,7 +104,75 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
   useEffect(() => {
-    if (effectiveSessionInfo.userId && effectiveSessionInfo.email) {
+    const initializeUser = async () => {
+      let userId, email, name, age, gender, finalTempUserId;
+      const currentIsGuest = propIsGuestMode === true || location.state?.isGuestMode === true || isTempUser;
+
+      if (currentIsGuest || isTempUser) {
+        // Use new temp user system
+        try {
+          finalTempUserId = tempUserId || await tempUserService.getTempUserId();
+          userId = finalTempUserId;
+          email = undefined; // Don't use fake emails anymore
+          name = 'Guest User';
+          age = undefined;
+          gender = undefined;
+
+          // Check rate limits for diagnosis feature
+          const canUse = await canUseFeature(FeatureType.DIAGNOSIS);
+          const limits = await getRemainingLimits();
+          setRateLimitInfo({
+            canUse,
+            remainingDaily: limits.diagnosis?.daily_remaining || 0
+          });
+        } catch (error) {
+          console.error('Error initializing temp user:', error);
+          setRateLimitInfo({
+            canUse: false,
+            remainingDaily: 0,
+            error: error instanceof Error ? error.message : 'Rate limit check failed'
+          });
+        }
+      } else if (isSignedIn && user) {
+        userId = user.id;
+        email = user.emailAddresses?.[0]?.emailAddress;
+        name = propUserProfile?.name || user.fullName || user.firstName;
+        age = propUserProfile?.age;
+        gender = propUserProfile?.gender;
+        setRateLimitInfo({ canUse: true, remainingDaily: -1 }); // Unlimited for authenticated users
+      } else {
+        // Fallback - treat as temp user
+        try {
+          finalTempUserId = await tempUserService.getTempUserId();
+          userId = finalTempUserId;
+          email = undefined;
+          name = 'Anonymous User';
+          setRateLimitInfo({ canUse: true, remainingDaily: 10 });
+        } catch (error) {
+          console.error('Error creating fallback temp user:', error);
+          setRateLimitInfo({ canUse: false, remainingDaily: 0 });
+        }
+      }
+
+      setEffectiveSessionInfo({ 
+        userId: userId || undefined, 
+        email, 
+        name: name ?? undefined, 
+        age, 
+        gender, 
+        isGuest: currentIsGuest,
+        tempUserId: finalTempUserId || undefined
+      });
+    };
+
+    initializeUser().catch(error => {
+      console.error('Failed to initialize user:', error);
+      setError('Failed to initialize session. Please refresh the page.');
+    });
+  }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile, isTempUser, tempUserId, canUseFeature, getRemainingLimits]);
+
+  useEffect(() => {
+    if (effectiveSessionInfo.userId) {
       const initialBackgroundTraits: Record<string, string> = {};
       if (effectiveSessionInfo.name) initialBackgroundTraits.name = effectiveSessionInfo.name;
       if (effectiveSessionInfo.age !== undefined) initialBackgroundTraits.age = effectiveSessionInfo.age.toString();
@@ -175,23 +229,57 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   };
 
   const startSession = async (userIdToUse?: string, emailToUse?: string) => {
-    if (!userIdToUse || !emailToUse) {
-      setError('User ID or Email is missing, cannot start session.');
-      console.error('Attempted to start session without userId or email.');
+    // Check rate limits before starting session
+    if (!rateLimitInfo.canUse) {
+      setError(rateLimitInfo.error || 'Daily diagnosis limit reached. Please try again tomorrow.');
       return;
     }
+
+    const finalUserId = userIdToUse || effectiveSessionInfo.tempUserId || effectiveSessionInfo.userId;
+    if (!finalUserId) {
+      setError('Unable to identify user. Please refresh the page.');
+      return;
+    }
+
     try {
       setLoading(true);
       setIsDiagnosisComplete(false);
+      
+      const requestBody: any = {
+        user_id: finalUserId,
+        is_temp_user: effectiveSessionInfo.isGuest || isTempUser
+      };
+
+      // Only include email for authenticated users
+      if (!effectiveSessionInfo.isGuest && !isTempUser && emailToUse) {
+        requestBody.email = emailToUse;
+      }
+
+      // Include temp_user_id for temp users
+      if (effectiveSessionInfo.tempUserId) {
+        requestBody.temp_user_id = effectiveSessionInfo.tempUserId;
+      }
+
       const response = await fetch(`${FASTAPI_URL}/api/diagnosis/session/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailToUse,
-          user_id: userIdToUse
-        })
+        body: JSON.stringify(requestBody)
       });
+
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || `Error: ${response.status}`);
+      }
+
+      // Update rate limit info if returned
+      if (data.remaining_daily !== undefined) {
+        setRateLimitInfo(prev => ({
+          ...prev,
+          remainingDaily: data.remaining_daily
+        }));
+      }
+
       setSessionData(prev => ({
         ...prev,
         sessionId: data.session_id,
@@ -199,14 +287,14 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       }));
       setLoading(false);
     } catch (err) {
-      setError('Failed to start session');
+      setError(err instanceof Error ? err.message : 'Failed to start session');
       setLoading(false);
     }
   };
 
   const processMessage = async (input: string, isSelection: boolean = false) => {
     if (!sessionData.sessionId) return;
-    console.log(isSelection)
+
     const userMessage: Message = { text: input, sender: 'user', timestamp: new Date().toISOString() };
     setSessionData(prev => ({
       ...prev,
@@ -217,10 +305,21 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
 
     try {
       setLoading(true);
+      
+      const requestBody: any = { 
+        session_id: sessionData.sessionId, 
+        text: input 
+      };
+
+      // Include temp_user_id for temp users
+      if (effectiveSessionInfo.tempUserId) {
+        requestBody.temp_user_id = effectiveSessionInfo.tempUserId;
+      }
+
       const response = await fetch(`${FASTAPI_URL}/api/diagnosis/session/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionData.sessionId, text: input }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -679,19 +778,43 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     );
   };
 
+  const renderRateLimitWarning = () => {
+    if (!effectiveSessionInfo.isGuest && !isTempUser) return null;
+    
+    return (
+      <Alert className="mb-4">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          {rateLimitInfo.canUse ? (
+            <>
+              <strong>Guest Mode:</strong> You have {rateLimitInfo.remainingDaily} diagnosis sessions remaining today.
+              {rateLimitInfo.remainingDaily <= 2 && (
+                <span className="text-orange-600"> Consider signing up for unlimited access.</span>
+              )}
+            </>
+          ) : (
+            <>
+              <strong>Daily Limit Reached:</strong> {rateLimitInfo.error || 'You have reached your daily diagnosis limit. Please try again tomorrow or sign up for unlimited access.'}
+            </>
+          )}
+        </AlertDescription>
+      </Alert>
+    );
+  };
+
   if (showLabReportAnalysis) {
     return (
       <LabReportAnalysis
-        visitId={undefined} // Will create temporary visit
+        visitId={undefined}
         userProfile={propUserProfile ? {
           name: propUserProfile.name,
           age: propUserProfile.age,
           gender: propUserProfile.gender,
           allergies: propUserProfile.allergies,
-          // medications: propUserProfile.medications
         } : undefined}
         onBack={() => setShowLabReportAnalysis(false)}
         isGuestMode={actualIsGuestMode}
+        tempUserId={effectiveSessionInfo.tempUserId}
       />
     );
   }
@@ -701,7 +824,15 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       <div className="p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">MedicoBud Assistant</h2>
+          {effectiveSessionInfo.isGuest && (
+            <div className="text-sm text-gray-500">
+              Guest Mode • {rateLimitInfo.remainingDaily} sessions left
+            </div>
+          )}
         </div>
+        
+        {renderRateLimitWarning()}
+        
         {error && (
           <Alert className="mb-4" variant="destructive">
             <AlertCircle className="h-4 w-4" />

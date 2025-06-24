@@ -30,6 +30,7 @@ router = APIRouter()
 class SessionStartRequest(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
+    temp_user_id: Optional[str] = None  # Add temp_user_id parameter
     is_temp_user: Optional[bool] = False
 
 # Existing Models (unchanged)
@@ -198,8 +199,13 @@ async def start_session(
     except Exception as e:
         print(f"Error parsing request body: {str(e)}")
     
-    # Check if this should be a temporary user session
-    is_temp_user = request.is_temp_user or (not request.email and not request.user_id)
+    # Enhanced temp user handling
+    is_temp_user = (request.is_temp_user or 
+                   (not request.email and not request.user_id) or
+                   (request.temp_user_id is not None))
+    
+    # Use provided temp_user_id or let session_service create one
+    final_user_id = request.user_id or request.temp_user_id
     
     if request.email and not is_temp_user:
         try:
@@ -211,8 +217,9 @@ async def start_session(
         result = session_service.start_session(
             db, 
             email=request.email, 
-            user_id=request.user_id, 
-            is_temp_user=is_temp_user
+            user_id=final_user_id, 
+            is_temp_user=is_temp_user,
+            request=raw_request  # Pass request for fingerprinting
         )
         return result
     except Exception as e:
@@ -220,8 +227,13 @@ async def start_session(
         raise HTTPException(status_code=500, detail=f"Session creation error: {str(e)}")
 
 @router.post("/session/message")
-async def send_message(input: MessageInput, db: Session = Depends(get_db)):
+async def send_message(
+    input: MessageInput, 
+    temp_user_id: Optional[str] = None,  # Add temp_user_id parameter
+    db: Session = Depends(get_db)
+):
     try:
+        # For temp users, we could add additional validation here if needed
         result = session_service.process_message(input.session_id, input.text, db)
         return result
     except ValueError as e:
@@ -370,34 +382,3 @@ async def get_session(
             "diagnosis_results": summary[2] if summary else {}
         }
     }
-
-# New endpoint for temporary user management
-@router.post("/temp-user/create")
-async def create_temp_user():
-    """Create a new temporary user"""
-    from app.temp.temp_user import temp_user_manager
-    
-    temp_user_id = temp_user_manager.create_temp_user()
-    return {
-        "temp_user_id": temp_user_id,
-        "message": "Temporary user created successfully"
-    }
-
-@router.delete("/temp-user/{temp_user_id}")
-async def clear_temp_user(temp_user_id: str):
-    """Clear all data for a temporary user"""
-    from app.temp.temp_user import temp_user_manager
-    
-    if not temp_user_manager.is_temp_user(temp_user_id):
-        raise HTTPException(status_code=404, detail="Temporary user not found")
-    
-    temp_user_manager.clear_temp_user_data(temp_user_id)
-    return {"message": "Temporary user data cleared successfully"}
-
-@router.get("/temp-stats")
-async def get_temp_stats():
-    """Get statistics about temporary users and sessions"""
-    from app.temp.temp_user import temp_user_manager
-    
-    stats = temp_user_manager.get_session_count()
-    return stats

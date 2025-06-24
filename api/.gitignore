@@ -19,3 +19,4 @@ app/lab_report/cached_models/
 app/lab_report/MedCat_model/medcat_model_pack/
 pect
 app/lab_report/MedCat_model
+app/temp/temp_reset.py
