@@ -10,12 +10,13 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, date
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from ..db import get_db
 from ..models import LabRecords
 from .lab_report import LabReportAnalyzer
+from ..temp.temp_user import temp_user_manager, FeatureType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ class LabAnalysisResponse(BaseModel):
     processing_time: Optional[float] = None
     system_info: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    temp_user_id: Optional[str] = None
+    remaining_daily: Optional[int] = None
 
 class SystemStatusResponse(BaseModel):
     """Response model for system status"""
@@ -142,12 +145,14 @@ def save_lab_records(db: Session, user_id: str, email: str, ai_analysis: Dict[st
 
 @router.post("/analyze-file", response_model=LabAnalysisResponse)
 async def analyze_lab_report_file(
+    request: Request,
     file: UploadFile = File(...),
     user_id: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
+    temp_user_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    """Analyze lab report from uploaded file and save results for logged-in users."""
+    """Analyze lab report from uploaded file with temp user support and rate limiting."""
     
     if not file.filename:
         raise HTTPException(
@@ -163,6 +168,48 @@ async def analyze_lab_report_file(
             detail=f"Unsupported file format {file_ext}. Supported: {supported_formats}"
         )
     
+    # Handle temporary user with Redis-based system
+    is_temp_user = not email or not user_id
+    final_temp_user_id = None
+    remaining_daily = None
+    
+    if is_temp_user:
+        # Get or create temp user
+        if temp_user_id and temp_user_manager.is_temp_user(temp_user_id):
+            final_temp_user_id = temp_user_id
+        else:
+            final_temp_user_id = temp_user_manager.create_temp_user_from_request(request)
+        
+        # Check feature access and rate limits
+        try:
+            access_info = temp_user_manager.check_feature_access(final_temp_user_id, FeatureType.LAB_REPORT)
+            remaining_daily = access_info.get("remaining_daily", 0)
+            
+            # Create a feature session for tracking
+            session_id = temp_user_manager.create_feature_session(
+                final_temp_user_id,
+                FeatureType.LAB_REPORT,
+                {"file_name": file.filename, "file_type": file_ext}
+            )
+            
+            logger.info(f"Lab report analysis started for temp user {final_temp_user_id}, session: {session_id}")
+            
+        except HTTPException as rate_limit_error:
+            # Return rate limit error with user info
+            return LabAnalysisResponse(
+                success=False,
+                error=rate_limit_error.detail,
+                temp_user_id=final_temp_user_id,
+                remaining_daily=0
+            )
+        except Exception as e:
+            logger.error(f"Error checking temp user access: {e}")
+            return LabAnalysisResponse(
+                success=False,
+                error="Unable to verify user access",
+                temp_user_id=final_temp_user_id
+            )
+    
     file_path = await save_upload_file(file)
     
     try:
@@ -171,11 +218,23 @@ async def analyze_lab_report_file(
         analysis_id = f"analysis_{int(datetime.now().timestamp())}"
         
         if result["success"]:
+            # Save to database for authenticated users only
             if user_id and email and result.get("ai_analysis"):
                 try:
                     save_lab_records(db, user_id, email, result["ai_analysis"])
                 except Exception as e:
                     logger.error(f"Failed to save lab records for user {user_id}: {e}")
+            
+            # For temp users, update session with results
+            elif is_temp_user and final_temp_user_id:
+                try:
+                    temp_user_manager.update_temp_session(session_id, {
+                        "analysis_results": result.get("ai_analysis"),
+                        "processing_time": result.get("total_processing_time"),
+                        "status": "completed"
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to update temp session: {e}")
 
             return LabAnalysisResponse(
                 success=True,
@@ -183,12 +242,16 @@ async def analyze_lab_report_file(
                 raw_text=result.get("raw_text"),
                 ai_analysis=result.get("ai_analysis"),
                 processing_time=result.get("total_processing_time", result.get("processing_time")),
-                system_info=result.get("system_info")
+                system_info=result.get("system_info"),
+                temp_user_id=final_temp_user_id,
+                remaining_daily=remaining_daily
             )
         else:
             return LabAnalysisResponse(
                 success=False,
-                error=result.get("error", "Analysis failed")
+                error=result.get("error", "Analysis failed"),
+                temp_user_id=final_temp_user_id,
+                remaining_daily=remaining_daily
             )
             
     except Exception as e:
