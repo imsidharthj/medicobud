@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 import logging
 import json
@@ -10,6 +10,8 @@ class DiagnosisStep(Enum):
     """Enum for diagnosis flow steps"""
     GREETING = "greeting"
     BACKGROUND_TRAITS = "background_traits"
+    SUBSTANCES = "substances"
+    TRAVELED = "traveled"
     SYMPTOMS = "symptoms"
     TIMING_INTENSITY = "timing_intensity"
     CARE_MEDICATION = "care_medication"
@@ -39,6 +41,10 @@ class SessionDataProcessor:
             return self._process_greeting_step(data, session_state)
         elif step == "background_traits":
             return self._process_background_step(data, session_state)
+        elif step == "substances":
+            return self._process_substances_step(data, session_state)
+        elif step == "traveled":
+            return self._process_traveled_step(data, session_state)
         elif step == "symptoms":
             return self._process_symptoms_step(data, session_state)
         elif step == "timing_intensity":
@@ -81,6 +87,22 @@ class SessionDataProcessor:
 
     def _process_background_step(self, data: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Process background information"""
+        return {
+            "success": True,
+            "message": "Have you used any substances like smoking, alcohol, or recreational drugs?",
+            "next_step": "substances"
+        }
+
+    def _process_substances_step(self, data: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Process substances information"""
+        return {
+            "success": True,
+            "message": "Have you traveled recently or been to any new places?",
+            "next_step": "traveled"
+        }
+
+    def _process_traveled_step(self, data: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Process travel information"""
         return {
             "success": True,
             "message": "Please describe the symptoms you're currently experiencing.",
@@ -256,7 +278,9 @@ class SessionDataProcessor:
         """Determine next step in the flow"""
         step_flow = {
             "greeting": "background_traits",
-            "background_traits": "symptoms", 
+            "background_traits": "substances",
+            "substances": "traveled",
+            "traveled": "symptoms", 
             "symptoms": "timing_intensity",
             "timing_intensity": "care_medication",
             "care_medication": "cross_questioning",
@@ -267,29 +291,21 @@ class SessionDataProcessor:
         return step_flow.get(current_step, "results")
 
     def _extract_background_data(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract and normalize background data for diagnosis service"""
+        """Extract and validate background data - pass raw data to diagnosis service"""
         background_data = {}
         
-        # Get all background information
-        for step in ["background_traits", "timing_intensity", "care_medication"]:
+        # Collect all step data without transformation - now including substances and traveled
+        for step in ["background_traits", "substances", "traveled", "timing_intensity", "care_medication"]:
             if step in session_state:
                 background_data.update(session_state[step])
         
-        # Normalize common fields
-        normalized_data = {}
+        # Only basic validation - let diagnosis_service handle the rest
+        validated_data = {}
         for key, value in background_data.items():
-            if isinstance(value, str):
-                value_lower = value.lower()
-                if value_lower in ["yes", "y", "true", "1"]:
-                    normalized_data[key] = "yes"
-                elif value_lower in ["no", "n", "false", "0"]:
-                    normalized_data[key] = "no"
-                else:
-                    normalized_data[key] = value
-            else:
-                normalized_data[key] = value
+            if value is not None and str(value).strip():
+                validated_data[key] = value
         
-        return normalized_data
+        return validated_data
 
     def get_session_summary(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
         """Get comprehensive session summary"""
@@ -306,116 +322,200 @@ class SessionDataProcessor:
             "updated_at": session_state.get("updated_at")
         }
 
-class DiagnosisFlowManager:
-    """Enhanced flow manager that properly handles structured data and integrates all services"""
+    def _validate_step_data(self, step: str, data: Dict[str, Any]) -> bool:
+        """Validate step data"""
+        validation_rules = {
+            "greeting": lambda d: "response" in d,
+            "background_traits": lambda d: "person_type" in d,
+            "substances": lambda d: "substances" in d,
+            "traveled": lambda d: "travel_history" in d,
+            "symptoms": lambda d: "symptoms" in d and isinstance(d["symptoms"], list) and len(d["symptoms"]) >= 1,
+            "timing_intensity": lambda d: any(key in d for key in ["timing", "onset", "severity", "temperature"]),
+            "care_medication": lambda d: "medical_care" in d,
+        }
+        
+        validator = validation_rules.get(step)
+        return validator(data) if validator else True
+
+
+class SessionStepController:
+    """Controls the diagnosis flow and sends step rendering instructions to frontend"""
     
     def __init__(self, interview_service, diagnosis_service):
+        self.interview_service = interview_service
+        self.diagnosis_service = diagnosis_service
         self.data_processor = SessionDataProcessor(interview_service, diagnosis_service)
-
-    def get_initial_message(self) -> str:
-        """Get initial greeting message"""
-        return "How are you feeling today?"
-
-    def process_user_input(self, current_step, user_input: str, session_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process user input - handles both structured JSON and natural language"""
         
+        # Define the complete step flow
+        self.step_flow = [
+            DiagnosisStep.GREETING,
+            DiagnosisStep.BACKGROUND_TRAITS,
+            DiagnosisStep.SUBSTANCES,
+            DiagnosisStep.TRAVELED,
+            DiagnosisStep.SYMPTOMS,
+            DiagnosisStep.TIMING_INTENSITY,
+            DiagnosisStep.CARE_MEDICATION,
+            DiagnosisStep.CROSS_QUESTIONING,
+            DiagnosisStep.DIAGNOSIS,
+            DiagnosisStep.RESULTS
+        ]
+    
+    def get_initial_step(self) -> Dict[str, Any]:
+        """Get the initial step for starting a session"""
+        return {
+            "success": True,
+            "message": "How are you feeling today?",
+            "current_step": "greeting",
+            "step_number": 1,
+            "total_steps": len(self.step_flow),
+            "progress_percentage": 0
+        }
+    
+    def process_step_response(self, current_step: str, user_data: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Process user response and determine next step"""
         try:
-            # Ensure session_id exists
-            if "session_id" not in session_data:
-                session_data["session_id"] = f"session_{datetime.now().timestamp()}"
+            # Store the user data
+            self._store_step_data(current_step, user_data, session_state)
             
-            # Check for special redirects
-            if "lab_report_analysis" in user_input.lower():
+            # Validate the data
+            if not self._validate_step_data(current_step, user_data):
                 return {
-                    "success": True,
-                    "redirect": "lab_report_analysis",
-                    "message": "Redirecting to Lab Report Analysis"
+                    "success": False,
+                    "message": f"Please provide valid information for {current_step}",
+                    "current_step": current_step
                 }
             
-            # Try to parse structured JSON data from frontend
-            structured_data = self._try_parse_json(user_input)
-            if structured_data:
-                step = structured_data.get("step", "symptoms")
-                step_data = structured_data.get("data", {})
-                
-                logger.info(f"Processing structured data - Step: {step}, Data: {step_data}")
-                
-                result = self.data_processor.process_step_data(step, step_data, session_data)
-                
-                # Handle special cases
-                if "redirect" in result:
-                    return result
-                
-                if "diagnosis_data" in result:
-                    return {
-                        "success": True,
-                        "message": result["message"],
-                        "next_step": result["next_step"],
-                        "diagnosis_data": result["diagnosis_data"]
-                    }
-                
-                return {
-                    "success": True,
-                    "message": result["message"],
-                    "next_step": result["next_step"]
-                }
+            # Process the step and get next step
+            next_step = self._determine_next_step(current_step, user_data, session_state)
             
-            # Handle manual diagnosis trigger
-            if user_input.lower() in ["diagnose", "analyze", "diagnosis"]:
-                diagnosis_result = self.data_processor._trigger_diagnosis(session_data)
-                
-                if "diagnosis_data" in diagnosis_result:
-                    return {
-                        "success": True,
-                        "message": diagnosis_result["message"],
-                        "next_step": "results",
-                        "diagnosis_data": diagnosis_result["diagnosis_data"]
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "message": diagnosis_result["message"],
-                        "error": diagnosis_result.get("error")
-                    }
+            # Handle special cases
+            if next_step == DiagnosisStep.CROSS_QUESTIONING:
+                return self._handle_cross_questioning(session_state)
+            elif next_step == DiagnosisStep.DIAGNOSIS:
+                return self._handle_diagnosis(session_state)
+            elif next_step == DiagnosisStep.RESULTS:
+                return self._handle_results(session_state)
             
-            # Default response for unstructured input
-            return {
-                "success": True,
-                "message": "Thank you for the information. Please continue with the next step.",
-                "next_step": current_step.value if hasattr(current_step, 'value') else str(current_step)
-            }
-                
+            # Return next step with appropriate message
+            return self._get_step_message(next_step, session_state)
+            
         except Exception as e:
-            logger.error(f"Error processing user input: {str(e)}")
+            logger.error(f"Error processing step {current_step}: {str(e)}")
             return {
                 "success": False,
-                "error": str(e),
-                "message": "I encountered an issue. Could you please try again?"
+                "message": "An error occurred processing your response",
+                "error": str(e)
             }
-
-    def _try_parse_json(self, user_input: str) -> Dict[str, Any]:
-        """Try to parse user input as JSON"""
-        try:
-            if user_input.startswith("{"):
-                return json.loads(user_input)
-        except json.JSONDecodeError:
-            pass
-        return None
-
-    def get_step_progress(self, current_step) -> Dict[str, Any]:
-        """Get progress information for current step"""
-        steps = ["greeting", "background_traits", "symptoms", "timing_intensity", "care_medication", "cross_questioning", "diagnosis", "results"]
-        current_step_str = current_step.value if hasattr(current_step, 'value') else str(current_step)
+    
+    def _get_step_message(self, step: DiagnosisStep, session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Get the appropriate message for each step"""
         
-        try:
-            current_index = steps.index(current_step_str)
-        except ValueError:
-            current_index = 0
+        step_messages = {
+            DiagnosisStep.GREETING: "How are you feeling today?",
+            DiagnosisStep.BACKGROUND_TRAITS: "Are you answering these questions for yourself or someone else?",
+            DiagnosisStep.SUBSTANCES: "Have you used any substances like smoking, alcohol, or recreational drugs?",
+            DiagnosisStep.TRAVELED: "Have you traveled recently or been to any new places?",
+            DiagnosisStep.SYMPTOMS: "Please describe the symptoms you're currently experiencing.",
+            DiagnosisStep.TIMING_INTENSITY: "When did your symptoms start?",
+            DiagnosisStep.CARE_MEDICATION: "Have you visited a doctor recently or are you currently taking any medication?",
+        }
+        
+        message = step_messages.get(step, "Please continue...")
+        
+        # Add progress information
+        current_index = self.step_flow.index(step) if step in self.step_flow else 0
         
         return {
-            "current_step": current_step_str,
+            "success": True,
+            "message": message,
+            "current_step": step.value,
             "step_number": current_index + 1,
-            "total_steps": len(steps),
-            "progress_percentage": int((current_index / (len(steps) - 1)) * 100),
-            "completed_steps": steps[:current_index]
+            "total_steps": len(self.step_flow),
+            "progress_percentage": int((current_index / (len(self.step_flow) - 1)) * 100) if len(self.step_flow) > 1 else 100
+        }
+
+    def _store_step_data(self, step: str, data: Dict[str, Any], session_state: Dict[str, Any]):
+        """Store step data in session state"""
+        if step not in session_state:
+            session_state[step] = {}
+        session_state[step].update(data)
+        session_state["last_updated_step"] = step
+        session_state["updated_at"] = datetime.now().isoformat()
+    
+    def _validate_step_data(self, step: str, data: Dict[str, Any]) -> bool:
+        """Validate step data"""
+        validation_rules = {
+            "greeting": lambda d: "response" in d,
+            "background_traits": lambda d: "person_type" in d,
+            "substances": lambda d: "substances" in d,
+            "traveled": lambda d: "travel_history" in d,
+            "symptoms": lambda d: "symptoms" in d and isinstance(d["symptoms"], list) and len(d["symptoms"]) >= 1,
+            "timing_intensity": lambda d: any(key in d for key in ["timing", "onset", "severity", "temperature"]),
+            "care_medication": lambda d: "medical_care" in d,
+        }
+        
+        validator = validation_rules.get(step)
+        return validator(data) if validator else True
+    
+    def _determine_next_step(self, current_step: str, user_data: Dict[str, Any], session_state: Dict[str, Any]) -> DiagnosisStep:
+        """Determine next step based on current step and user data"""
+        
+        # Handle special routing logic
+        if current_step == "greeting" and user_data.get("response") == "lab_report_analysis":
+            return DiagnosisStep.RESULTS  # Special redirect
+        
+        if current_step == "symptoms":
+            symptoms = session_state.get("symptoms", {}).get("symptoms", [])
+            if len(symptoms) < 3:
+                return DiagnosisStep.SYMPTOMS  # Stay on symptoms step
+        
+        # Normal flow progression
+        try:
+            current_enum = DiagnosisStep(current_step)
+            current_index = self.step_flow.index(current_enum)
+            if current_index < len(self.step_flow) - 1:
+                return self.step_flow[current_index + 1]
+        except (ValueError, IndexError):
+            pass
+        
+        return DiagnosisStep.RESULTS
+    
+    def _handle_cross_questioning(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle cross-questioning step"""
+        try:
+            symptoms = session_state.get("symptoms", {}).get("symptoms", [])
+            session_id = session_state.get("session_id", f"session_{datetime.now().timestamp()}")
+            
+            if not session_state.get("cross_questioning_started"):
+                session_state["cross_questioning_started"] = True
+                question = self.interview_service.start_interview(session_id, symptoms)
+            else:
+                last_response = session_state.get("last_cross_questioning_response", "")
+                question = self.interview_service.process_input(session_id, last_response)
+            
+            # Return simple format like other steps, not nested render_step
+            return {
+                "success": True,
+                "message": question,
+                "next_step": "cross_questioning",
+                "interview_active": True
+            }
+        except Exception as e:
+            logger.error(f"Cross-questioning error: {e}")
+            return self._handle_diagnosis(session_state)
+    
+    def _handle_diagnosis(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle diagnosis generation"""
+        return self.data_processor._trigger_diagnosis(session_state)
+    
+    def _handle_results(self, session_state: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle results display"""
+        return {
+            "success": True,
+            "render_step": {
+                "step": "results",
+                "message": "Session complete",
+                "ui_type": "results"
+            },
+            "session_complete": True
         }
