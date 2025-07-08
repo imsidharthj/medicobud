@@ -14,7 +14,7 @@ import Autocomplete from '@/data/autocomplete';
 import LabReportAnalysis from './LabReportAnalysis';
 import { useAuth } from '@/authProvide';
 import { tempUserService, FeatureType } from '@/utils/tempUser';
-import { determineRoutingStep, RoutingContext } from '@/utils/diagnosisRouting';
+import { determineRoutingStep, RoutingContext } from '@/components/diagnosis/diagnosisRouting';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
