@@ -14,6 +14,7 @@ import Autocomplete from '@/data/autocomplete';
 import LabReportAnalysis from './LabReportAnalysis';
 import { useAuth } from '@/authProvide';
 import { tempUserService, FeatureType } from '@/utils/tempUser';
+import { determineRoutingStep, RoutingContext } from '@/utils/diagnosisRouting';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
@@ -109,7 +110,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       const currentIsGuest = propIsGuestMode === true || location.state?.isGuestMode === true || isTempUser;
 
       if (currentIsGuest || isTempUser) {
-        // Use new temp user system
         try {
           finalTempUserId = tempUserId || await tempUserService.getTempUserId();
           userId = finalTempUserId;
@@ -118,7 +118,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           age = undefined;
           gender = undefined;
 
-          // Check rate limits for diagnosis feature
           const canUse = await canUseFeature(FeatureType.DIAGNOSIS);
           const limits = await getRemainingLimits();
           setRateLimitInfo({
@@ -141,7 +140,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         gender = propUserProfile?.gender;
         setRateLimitInfo({ canUse: true, remainingDaily: -1 }); // Unlimited for authenticated users
       } else {
-        // Fallback - treat as temp user
         try {
           finalTempUserId = await tempUserService.getTempUserId();
           userId = finalTempUserId;
@@ -198,7 +196,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           ...initialBackgroundTraits
         }
       }));
-      startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
     } else if (!loading && !sessionData.sessionId) {
       console.log("Waiting for effective session info to start session...");
     }
@@ -229,7 +226,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   };
 
   const startSession = async (userIdToUse?: string, emailToUse?: string) => {
-    // Check rate limits before starting session
     if (!rateLimitInfo.canUse) {
       setError(rateLimitInfo.error || 'Daily diagnosis limit reached. Please try again tomorrow.');
       return;
@@ -250,12 +246,10 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         is_temp_user: effectiveSessionInfo.isGuest || isTempUser
       };
 
-      // Only include email for authenticated users
       if (!effectiveSessionInfo.isGuest && !isTempUser && emailToUse) {
         requestBody.email = emailToUse;
       }
 
-      // Include temp_user_id for temp users
       if (effectiveSessionInfo.tempUserId) {
         requestBody.temp_user_id = effectiveSessionInfo.tempUserId;
       }
@@ -272,7 +266,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         throw new Error(data.detail || data.error || `Error: ${response.status}`);
       }
 
-      // Update rate limit info if returned
       if (data.remaining_daily !== undefined) {
         setRateLimitInfo(prev => ({
           ...prev,
@@ -292,26 +285,17 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     }
   };
 
-  const processMessage = async (input: string, isSelection: boolean = false) => {
+  const sendStructuredData = async (step: string, data: any) => {
     if (!sessionData.sessionId) return;
-
-    const userMessage: Message = { text: input, sender: 'user', timestamp: new Date().toISOString() };
-    setSessionData(prev => ({
-      ...prev,
-      messages: [...prev.messages, userMessage],
-    }));
-    setCurrentInput('');
-    setSelectedSymptoms([]);
 
     try {
       setLoading(true);
       
       const requestBody: any = { 
         session_id: sessionData.sessionId, 
-        text: input 
+        text: JSON.stringify({ step, data }) // Send as structured JSON
       };
 
-      // Include temp_user_id for temp users
       if (effectiveSessionInfo.tempUserId) {
         requestBody.temp_user_id = effectiveSessionInfo.tempUserId;
       }
@@ -327,10 +311,10 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         throw new Error(errorData.detail || `Error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const result = await response.json();
       
-      if (data.diagnosis_data && (data.diagnosis_data.diagnosis || data.diagnosis_data.secondary_diagnosis)) {
-        const formattedMessage = formatDiagnosisResults(data.diagnosis_data, sessionData.symptoms);
+      if (result.diagnosis_data && (result.diagnosis_data.diagnosis || result.diagnosis_data.secondary_diagnosis)) {
+        const formattedMessage = formatDiagnosisResults(result.diagnosis_data, sessionData.symptoms);
         const systemMessage: Message = { 
           text: formattedMessage, 
           sender: 'system', 
@@ -340,49 +324,53 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         setSessionData(prev => ({
           ...prev,
           messages: [...prev.messages, systemMessage],
-          diagnosis_results: data.diagnosis_data.diagnosis || [],
+          diagnosis_results: result.diagnosis_data.diagnosis || [],
         }));
         setIsDiagnosisComplete(true); 
       } else {
-        const systemMessage: Message = { text: data.message, sender: 'system', timestamp: new Date().toISOString() };
+        const systemMessage: Message = { text: result.message, sender: 'system', timestamp: new Date().toISOString() };
         setSessionData(prev => ({
           ...prev,
           messages: [...prev.messages, systemMessage],
         }));
       }
 
-      if (data.message.includes('yourself or someone else')) {
-        setSessionData(prev => ({
-          ...prev,
-          background_traits: { ...prev.background_traits, is_self: input.toLowerCase() === 'myself' ? 'yes' : 'no' },
-        }));
-      } else if (data.message.includes('substances') || data.message.includes('traveled')) {
-        setSessionData(prev => ({
-          ...prev,
-          background_traits: { ...prev.background_traits, [data.message]: input },
-        }));
-      } else if (data.message.includes('symptoms')) {
-        setSessionData(prev => ({
-          ...prev,
-          symptoms: [...prev.symptoms, ...input.split(',').map(s => s.trim()).filter(Boolean)],
-        }));
-      } else if (data.message.includes('symptoms start') || data.message.includes('severe') || data.message.includes('temperature')) {
-        setSessionData(prev => ({
-          ...prev,
-          timing_intensity: { ...prev.timing_intensity, [data.message]: input },
-        }));
-      } else if (data.message.includes('doctor') || data.message.includes('medication')) {
-        setSessionData(prev => ({
-          ...prev,
-          care_medication: { ...prev.care_medication, [data.message]: input },
-        }));
-      }
       setLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process message');
-      console.error('Message processing error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process structured data');
+      console.error('Structured data processing error:', err);
       setLoading(false);
     }
+  };
+
+  const processMessage = async (input: string, _isSelection: boolean = false) => {
+    if (!sessionData.sessionId) return;
+
+    const userMessage: Message = { text: input, sender: 'user', timestamp: new Date().toISOString() };
+    setSessionData(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMessage],
+    }));
+    setCurrentInput('');
+    setSelectedSymptoms([]);
+
+    const lastSystemMessage = sessionData.messages[sessionData.messages.length - 1]?.text || '';
+    const routingContext: RoutingContext = {
+      lastSystemMessage,
+      input,
+      selectedSymptoms,
+      currentInput
+    };
+    
+    const routingResult = determineRoutingStep(routingContext);
+    
+    if (routingResult.shouldSendStructured) {
+      await sendStructuredData(routingResult.step, routingResult.data);
+      return;
+    }
+
+    setError('Please use the provided interface options');
+    console.warn('Unstructured input received:', input);
   };
 
   const renderMessage = (message: Message, index: number) => {
@@ -474,11 +462,16 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                         <div
                           key={option.value}
                           className={`border border-gray-200 rounded-md p-3 flex items-center cursor-pointer transition-all duration-200 hover:border-${option.color}-500 hover:bg-${option.color}-50`}
-                          onClick={() => {
+                          onClick={async () => {
                             if (option.isSpecial && option.value === 'lab_report_analysis') {
                               setShowLabReportAnalysis(true);
                             } else {
-                              processMessage(option.value, true);
+                              if (!sessionData.sessionId && effectiveSessionInfo.userId) {
+                                await startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
+                              }
+                              setTimeout(() => {
+                                processMessage(option.value, true);
+                              }, 100);
                             }
                           }}
                         >
