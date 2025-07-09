@@ -15,6 +15,7 @@ import LabReportAnalysis from './LabReportAnalysis';
 import { useAuth } from '@/authProvide';
 import { tempUserService, FeatureType } from '@/utils/tempUser';
 import { determineRoutingStep, RoutingContext } from '@/components/diagnosis/diagnosisRouting';
+import DiagnosisIntentIdentifier from './DiagnosisIntentIdentifier';
 
 const COMMON_SYMPTOMS = [
   "Headache", "Fever", "Cough", "Sore throat", 
@@ -101,6 +102,10 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [isDiagnosisComplete, setIsDiagnosisComplete] = useState<boolean>(false); 
   const [showLabReportAnalysis, setShowLabReportAnalysis] = useState<boolean>(false);
+  const [showIntentIdentifier, setShowIntentIdentifier] = useState<boolean>(false);
+  const [pendingUserInput, setPendingUserInput] = useState<string>('');
+  const [isWaitingForSession, setIsWaitingForSession] = useState<boolean>(false);
+  
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const chatContainerRef = useRef<null | HTMLDivElement>(null);
 
@@ -113,7 +118,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         try {
           finalTempUserId = tempUserId || await tempUserService.getTempUserId();
           userId = finalTempUserId;
-          email = undefined; // Don't use fake emails anymore
+          email = undefined;
           name = 'Guest User';
           age = undefined;
           gender = undefined;
@@ -124,12 +129,11 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
             canUse,
             remainingDaily: limits.diagnosis?.daily_remaining || 0
           });
-        } catch (error) {
-          console.error('Error initializing temp user:', error);
+        } catch (err) {
           setRateLimitInfo({
             canUse: false,
             remainingDaily: 0,
-            error: error instanceof Error ? error.message : 'Rate limit check failed'
+            error: err instanceof Error ? err.message : 'Rate limit check failed'
           });
         }
       } else if (isSignedIn && user) {
@@ -138,7 +142,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         name = propUserProfile?.name || user.fullName || user.firstName;
         age = propUserProfile?.age;
         gender = propUserProfile?.gender;
-        setRateLimitInfo({ canUse: true, remainingDaily: -1 }); // Unlimited for authenticated users
+        setRateLimitInfo({ canUse: true, remainingDaily: -1 });
       } else {
         try {
           finalTempUserId = await tempUserService.getTempUserId();
@@ -146,8 +150,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           email = undefined;
           name = 'Anonymous User';
           setRateLimitInfo({ canUse: true, remainingDaily: 10 });
-        } catch (error) {
-          console.error('Error creating fallback temp user:', error);
+        } catch (err) {
           setRateLimitInfo({ canUse: false, remainingDaily: 0 });
         }
       }
@@ -163,8 +166,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       });
     };
 
-    initializeUser().catch(error => {
-      console.error('Failed to initialize user:', error);
+    initializeUser().catch(() => {
       setError('Failed to initialize session. Please refresh the page.');
     });
   }, [propIsGuestMode, location.state, isSignedIn, user, propUserProfile, isTempUser, tempUserId, canUseFeature, getRemainingLimits]);
@@ -196,8 +198,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           ...initialBackgroundTraits
         }
       }));
-    } else if (!loading && !sessionData.sessionId) {
-      console.log("Waiting for effective session info to start session...");
     }
   }, [effectiveSessionInfo, propUserProfile]);
 
@@ -273,27 +273,31 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         }));
       }
 
+      const systemMessage = { text: data.message, sender: 'system', timestamp: new Date().toISOString() };
+
       setSessionData(prev => ({
         ...prev,
         sessionId: data.session_id,
-        messages: [{ text: data.message, sender: 'system', timestamp: new Date().toISOString() }],
+        messages: data.message ? [...prev.messages, { ...systemMessage, sender: 'system' }] : prev.messages,
       }));
       setLoading(false);
+      return data.session_id;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
       setLoading(false);
     }
   };
 
-  const sendStructuredData = async (step: string, data: any) => {
-    if (!sessionData.sessionId) return;
+  const sendStructuredData = async (step: string, data: any, overrideSessionId?: string) => {
+    const currentSessionId = overrideSessionId || sessionData.sessionId;
+    if (!currentSessionId) return;
 
     try {
       setLoading(true);
       
       const requestBody: any = { 
-        session_id: sessionData.sessionId, 
-        text: JSON.stringify({ step, data }) // Send as structured JSON
+        session_id: currentSessionId, 
+        text: JSON.stringify({ step, data })
       };
 
       if (effectiveSessionInfo.tempUserId) {
@@ -338,13 +342,30 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process structured data');
-      console.error('Structured data processing error:', err);
       setLoading(false);
     }
   };
 
-  const processMessage = async (input: string, _isSelection: boolean = false) => {
-    if (!sessionData.sessionId) return;
+  const processMessage = async (input: string, _isSelection: boolean = false, overrideSessionId?: string) => {
+    if (!sessionData.sessionId && !_isSelection && !overrideSessionId) {
+      setPendingUserInput(input);
+      setShowIntentIdentifier(true);
+      
+      const userMessage: Message = { 
+        text: input, 
+        sender: 'user', 
+        timestamp: new Date().toISOString() 
+      };
+      setSessionData(prev => ({
+        ...prev,
+        messages: [...prev.messages, userMessage],
+      }));
+      setCurrentInput('');
+      return;
+    }
+
+    const currentSessionId = overrideSessionId || sessionData.sessionId;
+    if (!currentSessionId) return;
 
     const userMessage: Message = { text: input, sender: 'user', timestamp: new Date().toISOString() };
     setSessionData(prev => ({
@@ -365,12 +386,46 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     const routingResult = determineRoutingStep(routingContext);
     
     if (routingResult.shouldSendStructured) {
-      await sendStructuredData(routingResult.step, routingResult.data);
+      await sendStructuredData(routingResult.step, routingResult.data, currentSessionId);
       return;
     }
 
     setError('Please use the provided interface options');
-    console.warn('Unstructured input received:', input);
+  };
+
+  const handleIntentDetected = async (service: string) => {
+    setShowIntentIdentifier(false);
+    setIsWaitingForSession(true);
+    
+    if (service === 'lab_report_analysis') {
+      setShowLabReportAnalysis(true);
+      setIsWaitingForSession(false);
+    } else if (service === 'disease_diagnosis') {
+      const newSessionId = await startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
+      setIsWaitingForSession(false);
+      
+      if (newSessionId) {
+        await sendStructuredData('greeting', { response: pendingUserInput }, newSessionId);
+      }
+    }
+    
+    setPendingUserInput('');
+  };
+
+  const handleIntentRejected = () => {
+    setShowIntentIdentifier(false);
+    setPendingUserInput('');
+    
+    const systemMessage: Message = {
+      text: "I couldn't determine what you need. Please choose from the options above or click one of the service buttons.",
+      sender: 'system',
+      timestamp: new Date().toISOString()
+    };
+    
+    setSessionData(prev => ({
+      ...prev,
+      messages: [...prev.messages, systemMessage],
+    }));
   };
 
   const renderMessage = (message: Message, index: number) => {
@@ -466,12 +521,14 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                             if (option.isSpecial && option.value === 'lab_report_analysis') {
                               setShowLabReportAnalysis(true);
                             } else {
-                              if (!sessionData.sessionId && effectiveSessionInfo.userId) {
-                                await startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
+                              let currentSessionId = sessionData.sessionId;
+                              if (!currentSessionId && effectiveSessionInfo.userId) {
+                                currentSessionId = await startSession(effectiveSessionInfo.userId, effectiveSessionInfo.email);
                               }
-                              setTimeout(() => {
-                                processMessage(option.value, true);
-                              }, 100);
+                              
+                              if (currentSessionId) {
+                                processMessage(option.value, true, currentSessionId);
+                              }
                             }
                           }}
                         >
@@ -733,7 +790,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     );
   };
 
-  // DO NOT DELETE THIS FUNCTION
   const renderInput = () => {
     if (isDiagnosisComplete) {
       return (
@@ -839,6 +895,28 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           {sessionData.messages.map((message, index) => (
             renderMessage(message, index)
           ))}
+          
+          {showIntentIdentifier && (
+            <div className="mb-3">
+              <DiagnosisIntentIdentifier
+                userInput={pendingUserInput}
+                setShowLabReportAnalysis={setShowLabReportAnalysis}
+                onIntentDetected={handleIntentDetected}
+                onShowServiceSelector={handleIntentRejected}
+              />
+            </div>
+          )}
+
+          {isWaitingForSession && (
+            <div className="flex justify-start mb-3">
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                <div className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500 mr-2" />
+                  <span className="text-blue-700 text-sm">Starting your session...</span>
+                </div>
+              </div>
+            </div>
+          )}
           
           {loading && (
             <div className="flex justify-start mb-3">
