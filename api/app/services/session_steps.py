@@ -364,7 +364,7 @@ class SessionStepController:
         """Get the initial step for starting a session"""
         return {
             "success": True,
-            "message": "How are you feeling today?",
+            "message": "",
             "current_step": "greeting",
             "step_number": 1,
             "total_steps": len(self.step_flow),
