@@ -93,8 +93,12 @@ class DiagnosisService:
                 context_parts.append(f"Age: {background['age']}")
             if background.get('gender'):
                 context_parts.append(f"Gender: {background['gender']}")
+            if background.get('onset'):
+                context_parts.append(f"Symptom onset: {background['onset']}")
             if background.get('severity'):
                 context_parts.append(f"Pain severity (1-10): {background['severity']}")
+            if background.get('temperature'):
+                context_parts.append(f"Fever level: {background['temperature']}")
             if background.get('smoking') == 'yes':
                 context_parts.append("History of smoking")
             if background.get('alcohol') == 'yes':
@@ -159,8 +163,12 @@ Important guidelines:
                     context_parts.append(f"Age: {background['age']}")
                 if background.get('gender'):
                     context_parts.append(f"Gender: {background['gender']}")
+                if background.get('onset'):
+                    context_parts.append(f"Symptom onset: {background['onset']}")
                 if background.get('severity'):
                     context_parts.append(f"Pain severity (1-10): {background['severity']}")
+                if background.get('temperature'):
+                    context_parts.append(f"Fever level: {background['temperature']}")
                 if background.get('smoking') == 'yes':
                     context_parts.append("History of smoking")
                 if background.get('alcohol') == 'yes':
