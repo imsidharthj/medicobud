@@ -9,13 +9,14 @@ export interface RoutingContext {
   input: string;
   selectedSymptoms?: string[];
   currentInput?: string;
+  currentStep?: string;
 }
 
 /**
  * Determines the appropriate step and data structure based on the system message and user input
  */
 export const determineRoutingStep = (context: RoutingContext): RoutingResult => {
-  const { lastSystemMessage, input, selectedSymptoms = [], currentInput = '' } = context;
+  const { lastSystemMessage, input, currentInput = '' } = context;
   
   // Greeting step - initial response
   if (lastSystemMessage.includes('How are you feeling today')) {
@@ -38,6 +39,17 @@ export const determineRoutingStep = (context: RoutingContext): RoutingResult => 
         shouldSendStructured: true
       };
     }
+  }
+  
+  // Symptom analysis confirmation step
+  if (lastSystemMessage.includes('Would you like to start a Symptom Analysis session?')) {
+    return {
+      step: 'symptom_analysis_confirmation',
+      data: {
+        wants_analysis: input.toLowerCase() === 'yes'
+      },
+      shouldSendStructured: true
+    };
   }
   
   // Background traits step - person identification
@@ -95,7 +107,7 @@ export const determineRoutingStep = (context: RoutingContext): RoutingResult => 
   // Timing/onset step
   if (lastSystemMessage.includes('symptoms start') || lastSystemMessage.includes('when did')) {
     return {
-      step: 'timing_intensity',
+      step: 'symptom_onset',
       data: {
         onset: input,
         timing_details: input
@@ -108,7 +120,7 @@ export const determineRoutingStep = (context: RoutingContext): RoutingResult => 
   if (lastSystemMessage.includes('severe') || lastSystemMessage.includes('scale')) {
     const severity = parseInt(input) || parseInt(currentInput) || 5;
     return {
-      step: 'timing_intensity',
+      step: 'pain_severity',
       data: {
         severity: severity,
         severity_description: `${severity}/10 - ${severity <= 3 ? 'Mild' : severity <= 7 ? 'Moderate' : 'Severe'}`
@@ -120,7 +132,7 @@ export const determineRoutingStep = (context: RoutingContext): RoutingResult => 
   // Temperature step
   if (lastSystemMessage.includes('temperature') || lastSystemMessage.includes('fever')) {
     return {
-      step: 'timing_intensity',
+      step: 'temperature',
       data: {
         temperature: input,
         fever_level: input.toLowerCase().includes('normal') ? 'normal' : 
