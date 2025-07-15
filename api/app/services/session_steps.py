@@ -47,6 +47,9 @@ class SessionStepController:
             else:
                 return DiagnosisStep.CROSS_QUESTIONING
 
+        if DiagnosisStep.CARE_MEDICATION.value in session_state.get("completed_steps", []):
+             return DiagnosisStep.CROSS_QUESTIONING
+
         data = session_state.get(current_step_str, {})
         
         step_map = {
