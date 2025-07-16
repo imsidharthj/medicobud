@@ -69,7 +69,8 @@ class InterviewResponse(BaseModel):
 # New Model for Chat Input
 class MessageInput(BaseModel):
     session_id: str
-    text: str
+    step: str
+    data: Dict[str, Any]
 
 # Helper functions (unchanged)
 def generate_session_id() -> str:
@@ -229,12 +230,16 @@ async def start_session(
 @router.post("/session/message")
 async def send_message(
     input: MessageInput, 
-    temp_user_id: Optional[str] = None,  # Add temp_user_id parameter
     db: Session = Depends(get_db)
 ):
     try:
-        # For temp users, we could add additional validation here if needed
-        result = session_service.process_message(input.session_id, input.text, db)
+        # The input is now structured, so we pass the step and data directly
+        result = session_service.process_message(
+            session_id=input.session_id, 
+            step=input.step, 
+            data=input.data, 
+            db=db
+        )
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

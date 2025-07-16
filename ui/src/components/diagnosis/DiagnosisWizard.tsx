@@ -55,6 +55,7 @@ interface SessionData {
   timing_intensity: Record<string, string>;
   care_medication: Record<string, string>;
   diagnosis_results?: DiagnosisResult[];
+  currentStep: string; // To track conversation state
 }
 
 interface DiagnosisWizardProps {
@@ -95,6 +96,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     background_traits: {},
     timing_intensity: {},
     care_medication: {},
+    currentStep: 'greeting', // Initialize with the first step
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,9 +297,11 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     try {
       setLoading(true);
       
+      // Updated to send a clean JSON object
       const requestBody: any = { 
         session_id: currentSessionId, 
-        text: JSON.stringify({ step, data })
+        step,
+        data
       };
 
       if (effectiveSessionInfo.tempUserId) {
@@ -329,6 +333,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
           ...prev,
           messages: [...prev.messages, systemMessage],
           diagnosis_results: result.diagnosis_data.diagnosis || [],
+          currentStep: result.next_step, // Keep state in sync
         }));
         setIsDiagnosisComplete(true); 
       } else {
@@ -336,6 +341,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
         setSessionData(prev => ({
           ...prev,
           messages: [...prev.messages, systemMessage],
+          currentStep: result.next_step, // Update current step from backend response
         }));
       }
 
@@ -380,7 +386,9 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       lastSystemMessage,
       input,
       selectedSymptoms,
-      currentInput
+      currentInput,
+      // Pass current step to routing logic
+      currentStep: sessionData.currentStep,
     };
     
     const routingResult = determineRoutingStep(routingContext);
