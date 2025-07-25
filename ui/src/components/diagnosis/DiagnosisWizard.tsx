@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Send, Loader2, User, Users, Check, X, MapPin, Clock, Thermometer, Stethoscope, FileText } from 'lucide-react';
 import { FASTAPI_URL } from '@/utils/api';
-import DiagnosisResultFormatter, { formatDiagnosisResults } from './DiagnosisResultFormatter';
+import DiagnosisResultFormatter from './DiagnosisResultFormatter';
 import LabReportAnalysis from './LabReportAnalysis';
 import { useAuth } from '@/authProvide';
 import { tempUserService, FeatureType } from '@/utils/tempUser';
@@ -31,6 +31,8 @@ interface Message {
   text: string;
   sender: 'system' | 'user';
   timestamp: string;
+  diagnosisData?: any;
+  messageType?: 'regular' | 'diagnosis';
 }
 
 interface DiagnosisResult {
@@ -50,7 +52,7 @@ interface SessionData {
   timing_intensity: Record<string, string>;
   care_medication: Record<string, string>;
   diagnosis_results?: DiagnosisResult[];
-  currentStep: string; // To track conversation state
+  currentStep: string;
 }
 
 interface DiagnosisWizardProps {
@@ -91,7 +93,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     background_traits: {},
     timing_intensity: {},
     care_medication: {},
-    currentStep: 'greeting', // Initialize with the first step
+    currentStep: 'greeting',
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +220,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   const handleSubmitSymptoms = () => {
     if (enteredSymptoms.length > 0) {
       processMessage(enteredSymptoms.join(', '), true);
-      setEnteredSymptoms([]); // Reset for future use
+      setEnteredSymptoms([]);
     }
   };
 
@@ -310,7 +312,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     try {
       setLoading(true);
       
-      // Updated to send a clean JSON object
       const requestBody: any = { 
         session_id: currentSessionId, 
         step,
@@ -334,27 +335,33 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
 
       const result = await response.json();
       
-      if (result.diagnosis_data && (result.diagnosis_data.diagnosis || result.diagnosis_data.secondary_diagnosis)) {
-        const formattedMessage = formatDiagnosisResults(result.diagnosis_data, sessionData.symptoms);
+      if (result.diagnosis_data && result.diagnosis_data.possible_conditions) {
         const systemMessage: Message = { 
-          text: formattedMessage, 
+          text: "Medical Assessment Complete",
           sender: 'system', 
-          timestamp: new Date().toISOString() 
+          timestamp: new Date().toISOString(),
+          diagnosisData: result.diagnosis_data,
+          messageType: 'diagnosis'
         };
         
         setSessionData(prev => ({
           ...prev,
           messages: [...prev.messages, systemMessage],
           diagnosis_results: result.diagnosis_data.diagnosis || [],
-          currentStep: result.next_step, // Keep state in sync
+          currentStep: result.next_step,
         }));
         setIsDiagnosisComplete(true); 
       } else {
-        const systemMessage: Message = { text: result.message, sender: 'system', timestamp: new Date().toISOString() };
+        const systemMessage: Message = { 
+          text: result.message, 
+          sender: 'system', 
+          timestamp: new Date().toISOString(),
+          messageType: 'regular'
+        };
         setSessionData(prev => ({
           ...prev,
           messages: [...prev.messages, systemMessage],
-          currentStep: result.next_step, // Update current step from backend response
+          currentStep: result.next_step,
         }));
       }
 
@@ -366,13 +373,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
   };
 
   const processMessage = async (input: string, _isSelection: boolean = false, overrideSessionId?: string) => {
-    // const isSymptomStep = sessionData.currentStep === 'symptoms';
-
-    // if (isSymptomStep) {
-    //   handleAddSymptom(currentInput);
-    //   setCurrentInput('');
-    //   return;
-    // }
     
     if (!sessionData.sessionId && !_isSelection && !overrideSessionId) {
       setPendingUserInput(input);
@@ -405,9 +405,8 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
     const routingContext: RoutingContext = {
       lastSystemMessage,
       input,
-      selectedSymptoms: [], // This is no longer managed here
+      selectedSymptoms: [],
       currentInput,
-      // Pass current step to routing logic
       currentStep: sessionData.currentStep,
     };
     
@@ -458,7 +457,7 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
 
   const renderMessage = (message: Message, index: number) => {
     const isUser = message.sender === 'user';
-    const isDiagnosisResult = message.text.includes('MEDICAL ASSESSMENT RESULTS');
+    const isDiagnosisResult = message.messageType === 'diagnosis' || message.text.includes('MEDICAL ASSESSMENT RESULTS') || message.text.includes('POSSIBLE CONDITIONS');
     const isLastSystemMessage = !isUser && index === sessionData.messages.length - 1;
     const isInitialMessage = message.text.includes('How are you feeling today') || message.text.includes('feeling today');
     const isSymptomAnalysisQuestion = message.text.includes('Would you like to start a Symptom Analysis session?');
@@ -485,7 +484,11 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
                   : 'bg-gray-100 text-gray-800'
             }`}
           >
-            {isDiagnosisResult ? <DiagnosisResultFormatter message={message.text} /> : message.text}
+            {isDiagnosisResult ? (
+              message.diagnosisData ? 
+                <DiagnosisResultFormatter diagnosisData={message.diagnosisData} /> : 
+                <DiagnosisResultFormatter message={message.text} />
+            ) : message.text}
           </div>
           <p className="text-xs text-gray-500 mt-1">
             {new Date(message.timestamp).toLocaleString()}
@@ -796,7 +799,6 @@ export const DiagnosisWizard: React.FC<DiagnosisWizardProps> = ({
       );
     }
 
-    // Don't render the input field for symptoms questions since DiagnosisSymptomInput handles it
     if (isSymptomsQuestion) {
       return null;
     }
