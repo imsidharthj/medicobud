@@ -2,11 +2,9 @@ import os
 import json
 import logging
 from typing import List, Dict, Any
-from fuzzywuzzy import fuzz
-from app.utils import unique_symptoms, load_default_disease_data
 
 from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 logger = logging.getLogger(__name__)
@@ -31,7 +29,7 @@ class DiagnosisService:
                     temperature=0.2,
                     max_tokens=2000,
                     request_timeout=120,
-                    max_retries=2
+                    max_retries=3
                 )
                 
                 logger.info(f"✅ LiteLLM diagnosis client initialized successfully with model: {self.model}")
@@ -39,336 +37,117 @@ class DiagnosisService:
                 logger.error(f"Error configuring LiteLLM client: {e}")
                 self.llm_client = None
 
-        # Load symptom data for validation
-        if not unique_symptoms:
-            load_default_disease_data()
-
-    def normalize_symptom(self, symptom: str) -> str:
-        """Normalize symptom text for consistency"""
-        if not isinstance(symptom, str):
-            return ""
-        normalized = symptom.strip().lower()
-        normalized = normalized.replace("dischromic _patches", "dischromic_patches")
-        normalized = normalized.replace("spotting_ urination", "spotting_urination")
-        normalized = normalized.replace("foul_smell_of urine", "foul_smell_of_urine")
-        normalized = normalized.replace(" ", "_")
-        return normalized
-
-    def fuzzy_match_symptoms(self, input_symptoms: List[str], threshold: int = 85) -> List[str]:
-        """Match input symptoms against known symptoms using fuzzy matching"""
-        matched_symptoms = []
-        all_known_symptoms = set(unique_symptoms)
+    def diagnose(self, symptoms: List[str], background: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Main diagnosis method - simplified LLM API call"""
+        if not self.llm_client:
+            raise Exception("LLM diagnosis service is not available. Please check LITELLM_API_KEY configuration.")
         
-        for input_symptom in input_symptoms:
-            normalized_input = self.normalize_symptom(input_symptom)
-            
-            if normalized_input in all_known_symptoms:
-                matched_symptoms.append(normalized_input)
-                continue
-            
-            best_match = None
-            best_score = 0
-            
-            for known_symptom in all_known_symptoms:
-                score = fuzz.ratio(normalized_input, known_symptom)
-                if score > best_score and score >= threshold:
-                    best_score = score
-                    best_match = known_symptom
-            
-            if best_match:
-                matched_symptoms.append(best_match)
-            else:
-                matched_symptoms.append(normalized_input)
+        # Validate input
+        if not symptoms or not isinstance(symptoms, list):
+            raise ValueError("No valid symptoms provided")
         
-        return matched_symptoms
-
-    def _create_diagnosis_prompt(self, symptoms: List[str], background: Dict[str, Any] = None) -> ChatPromptTemplate:
-        """Create a structured prompt template for diagnosis"""
-        
-        # Prepare background information for context
-        background_context = ""
-        if background:
-            context_parts = []
-            if background.get('age'):
-                context_parts.append(f"Age: {background['age']}")
-            if background.get('gender'):
-                context_parts.append(f"Gender: {background['gender']}")
-            if background.get('severity'):
-                context_parts.append(f"Pain severity (1-10): {background['severity']}")
-            if background.get('smoking') == 'yes':
-                context_parts.append("History of smoking")
-            if background.get('alcohol') == 'yes':
-                context_parts.append("Regular alcohol consumption")
-            if background.get('travel_history') == 'yes':
-                context_parts.append("Recent travel history")
-            
-            if context_parts:
-                background_context = f"\n\nPatient background: {', '.join(context_parts)}"
-
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", """You are a medical AI assistant specializing in symptom analysis and preliminary diagnosis. 
+        ("system", """You are Medicobud a AI assistant that specializing in symptom analysis and preliminary diagnosis. 
             Provide accurate, evidence-based medical assessments while emphasizing the importance of professional medical consultation.
             
-            Always return your response as a valid JSON array with the exact format specified below."""),
-            
-            ("human", """Analyze these symptoms: {symptoms}.{background_context}
+            ### INPUT
+            Your role is to:
+            - Analyze patient symptoms and background context
+            - Suggest the top 3 possible conditions (with confidence and reasoning)
+            - Recommend safe home remedies if symptoms are mild
+            - Assess if the case is urgent or needs professional care
+            - Provide simple follow-up advice
 
-Provide a comprehensive medical assessment with the 5 most likely conditions based on these symptoms. 
-Consider common conditions first, then less common ones based on symptom patterns. 
-For each condition, assess the severity level and symptom coverage.
+            ### INPUT
+            You will receive:
+            - SYMPTOMS: {symptoms}
+            - BACKGROUND INFO: {background_info}
 
-Return ONLY a JSON array with this exact format:
-[
-  {{
-    "disease": "Condition Name",
-    "confidence": 0.85,
-    "severity": "medium",
-    "symptom_coverage": 75,
-    "key_symptoms": ["symptom1", "symptom2"],
-    "explanations": ["Brief explanation of why this condition fits"]
-  }}
-]
+            ### TASK
+            Return only a JSON object that includes:
+            ```json
+            {{
+            "possible_conditions": [
+                {{
+                "condition": "Condition Name",
+                "confidence_percent": 85.5,
+                "severity": "low | medium | high",
+                "symptom_coverage_percent": 80,
+                "key_symptoms": ["symptom1", "symptom2"],
+                "explanation": "Short rationale for why this condition matches"
+                }}
+            ],
+            "treatment_plan": [
+                "Brief home remedy suggestions (e.g., hydration, rest, warm compresses, etc.) with web sources to read and search for it. Only include if symptoms are mild and there's no red flag."
+            ],
+            "risk_assessment": {{
+                "urgency_level": "low | medium | high",
+                "red_flags": ["symptom1", "symptom2"],
+                "advice": "If any red flag is present, seek immediate medical attention."
+            }},
+            "follow_up": {{
+                "monitor": ["what to track"],
+                "timeline": "e.g., If symptoms persist beyond 3 days, consult a doctor.",
+                "next_steps": "e.g., Take temperature twice daily, avoid physical exertion"
+                }},
+            }}
+            ```
 
-Important guidelines:
-- Use decimal confidence values between 0.0 and 1.0
-- Severity must be: 'low', 'medium', or 'high'
-- Symptom_coverage should be a percentage (0-100)
-- Order by likelihood (highest confidence first)
-- Use standard medical condition names
-- Key_symptoms should list the most relevant symptoms for this condition
-- Explanations should be brief and medically sound
-- Return only the JSON array, no other text""")
+            ### IMPORTANT
+            - Never invent or assume patient data not provided.
+            - Use only general, non-invasive treatment suggestions (no prescriptions or unverified remedies).
+            - Flag urgent or severe cases that may require immediate lab tests or professional care.
+            """),
         ])
         
-        return prompt_template
-
-    def _llm_diagnose(self, symptoms: List[str], background: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        """Primary diagnosis method using LiteLLM with LangChain"""
-        if not self.llm_client or not symptoms:
-            return []
-
+        # Prepare background information
+        background_info = "No additional background information provided."
+        if background:
+            info_parts = []
+            if background.get('age'):
+                info_parts.append(f"Age: {background['age']}")
+            if background.get('gender'):
+                info_parts.append(f"Gender: {background['gender']}")
+            if background.get('person_type'):
+                info_parts.append(f"Patient type: {background['person_type']}")
+            if background.get('onset') or background.get('timing_details'):
+                onset = background.get('onset') or background.get('timing_details')
+                info_parts.append(f"Symptom onset: {onset}")
+            if background.get('severity'):
+                info_parts.append(f"Pain severity (1-10): {background['severity']}")
+            if background.get('temperature') or background.get('fever_level'):
+                temp = background.get('temperature') or background.get('fever_level')
+                info_parts.append(f"Temperature/Fever: {temp}")
+            if background.get('substances') == 'yes' or background.get('substance_details'):
+                info_parts.append("History of substance use (smoking/alcohol/drugs)")
+            if background.get('travel_history') == 'yes' or background.get('travel_details'):
+                info_parts.append("Recent travel history")
+            if background.get('medical_care') == 'yes' or background.get('care_details'):
+                info_parts.append("Recent medical care or medication use")
+            
+            if info_parts:
+                background_info = '\n'.join(info_parts)
+        
+        formatted_data = {
+            "symptoms": ', '.join(symptoms),
+            "background_info": background_info
+        }
+        
         try:
-            # Create prompt template
-            prompt_template = self._create_diagnosis_prompt(symptoms, background)
-            
-            # Prepare background context
-            background_context = ""
-            if background:
-                context_parts = []
-                if background.get('age'):
-                    context_parts.append(f"Age: {background['age']}")
-                if background.get('gender'):
-                    context_parts.append(f"Gender: {background['gender']}")
-                if background.get('severity'):
-                    context_parts.append(f"Pain severity (1-10): {background['severity']}")
-                if background.get('smoking') == 'yes':
-                    context_parts.append("History of smoking")
-                if background.get('alcohol') == 'yes':
-                    context_parts.append("Regular alcohol consumption")
-                if background.get('travel_history') == 'yes':
-                    context_parts.append("Recent travel history")
-                
-                if context_parts:
-                    background_context = f"\n\nPatient background: {', '.join(context_parts)}"
-            
-            # Format input data
-            formatted_data = {
-                "symptoms": ', '.join(symptoms),
-                "background_context": background_context
-            }
-            
             logger.info(f"Attempting diagnosis with LiteLLM ({self.model})")
+            logger.info(f"Input data: symptoms={symptoms}, background keys={list(background.keys()) if background else 'None'}")
             
-            # Create and execute chain
-            chain = prompt_template | self.llm_client | StrOutputParser()
+            json_parser = JsonOutputParser()
+            chain = prompt_template | self.llm_client | json_parser
             response = chain.invoke(formatted_data)
             
-            if not response or not response.strip():
-                raise ValueError("Empty response from LiteLLM")
+            if not response or not isinstance(response, dict):
+                raise ValueError("Invalid response format from LLM")
             
-            logger.info("Diagnosis completed with LiteLLM")
-            return self._parse_diagnosis_response(response, symptoms)
-                
+            logger.info(f"Diagnosis response keys: {list(response.keys())}")
+            logger.info("Diagnosis completed successfully with LiteLLM")
+            return response
+            
         except Exception as e:
             logger.error(f"Error in LLM diagnosis: {e}")
-            return self._extract_diseases_from_text(f"LiteLLM failed: {e}", symptoms)
-
-    def _parse_diagnosis_response(self, response: str, symptoms: List[str]) -> List[Dict[str, Any]]:
-        """Parse and validate the LLM diagnosis response"""
-        try:
-            # Clean up the response
-            text_content = response.strip()
-            
-            if text_content.startswith("```json"):
-                text_content = text_content[7:]
-            if text_content.startswith("```"):
-                text_content = text_content[3:]
-            if text_content.endswith("```"):
-                text_content = text_content[:-3]
-            
-            text_content = text_content.strip()
-            
-            # Parse JSON response
-            data = json.loads(text_content)
-            if isinstance(data, list):
-                formatted_results = []
-                for item in data[:5]:  # Limit to top 5
-                    if isinstance(item, dict) and "disease" in item:
-                        disease = item["disease"]
-                        confidence = item.get("confidence", 0.5)
-                        severity = item.get("severity", "medium")
-                        symptom_coverage = item.get("symptom_coverage", 50)
-                        key_symptoms = item.get("key_symptoms", [])
-                        explanations = item.get("explanations", [])
-                        
-                        # Validate and normalize confidence
-                        if isinstance(confidence, (int, float)):
-                            if confidence > 1.0:
-                                confidence = confidence / 100.0
-                            confidence = max(0.0, min(1.0, confidence))
-                        else:
-                            confidence = 0.5
-                        
-                        # Validate severity
-                        if severity not in ['low', 'medium', 'high']:
-                            severity = 'medium'
-                        
-                        # Validate symptom coverage
-                        if not isinstance(symptom_coverage, (int, float)) or symptom_coverage < 0 or symptom_coverage > 100:
-                            symptom_coverage = 50
-                        
-                        formatted_results.append({
-                            "disease": disease,
-                            "confidence": round(confidence * 100, 1),  # Convert to percentage
-                            "severity": severity,
-                            "symptom_coverage": int(symptom_coverage),
-                            "key_symptoms": key_symptoms if isinstance(key_symptoms, list) else [],
-                            "explanations": explanations if isinstance(explanations, list) else []
-                        })
-                
-                return formatted_results
-            else:
-                return []
-                
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            return self._extract_diseases_from_text(response, symptoms)
-
-    def _extract_diseases_from_text(self, text: str, symptoms: List[str]) -> List[Dict[str, Any]]:
-        """Fallback method to extract diseases from unstructured text"""
-        common_diseases = [
-            "Common Cold", "Influenza", "COVID-19", "Pneumonia", "Bronchitis",
-            "Asthma", "Allergies", "Sinusitis", "Migraine", "Tension Headache",
-            "Gastroenteritis", "Food Poisoning", "Dehydration", "Anxiety",
-            "Depression", "Hypertension", "Diabetes", "Arthritis"
-        ]
-        
-        found_diseases = []
-        text_lower = text.lower()
-        
-        for disease in common_diseases:
-            if disease.lower() in text_lower:
-                confidence = 60.0  # Base confidence
-                
-                # Boost confidence for symptom matches
-                if any(symptom in ["fever", "cough", "fatigue"] for symptom in symptoms):
-                    if disease in ["Common Cold", "Influenza", "COVID-19"]:
-                        confidence = 80.0
-                
-                found_diseases.append({
-                    "disease": disease,
-                    "confidence": confidence,
-                    "severity": "medium",
-                    "symptom_coverage": 60,
-                    "key_symptoms": symptoms[:3],  # Use first 3 symptoms
-                    "explanations": [f"Pattern matches common presentation of {disease}"]
-                })
-                
-                if len(found_diseases) >= 5:
-                    break
-        
-        # If no diseases found, provide generic fallback
-        if not found_diseases:
-            found_diseases = [
-                {
-                    "disease": "Viral Infection",
-                    "confidence": 60.0,
-                    "severity": "low",
-                    "symptom_coverage": 50,
-                    "key_symptoms": symptoms[:2],
-                    "explanations": ["Symptoms consistent with common viral infection"]
-                },
-                {
-                    "disease": "Bacterial Infection",
-                    "confidence": 40.0,
-                    "severity": "medium",
-                    "symptom_coverage": 40,
-                    "key_symptoms": symptoms[:2],
-                    "explanations": ["Could indicate bacterial infection requiring evaluation"]
-                }
-            ]
-        
-        return found_diseases[:5]
-
-    def format_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Format diagnosis results with disclaimer"""
-        disclaimer = (
-            "DISCLAIMER: This is an AI-generated diagnosis based on reported symptoms and should not be "
-            "considered a substitute for professional medical advice. The information provided is for "
-            "educational purposes only. Please consult a qualified healthcare provider for diagnosis, "
-            "treatment recommendations, and answers to your personal medical questions."
-        )
-        return {"diagnosis": results, "disclaimer": disclaimer}
-
-    def diagnose(self, symptoms: List[str], background: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Main diagnosis method - now purely LLM-based with LangChain"""
-        if not self.llm_client:
-            return {
-                "error": "LLM diagnosis service is not available. Please check LITELLM_API_KEY configuration.",
-                "diagnosis": [],
-                "disclaimer": "Medical AI service unavailable. Please consult a healthcare provider."
-            }
-        
-        # Clean and validate symptoms
-        clean_symptoms = [s.strip().lower() for s in (symptoms if isinstance(symptoms, list) else [symptoms]) 
-                         if isinstance(s, str) and s.strip()]
-        
-        if not clean_symptoms:
-            return {
-                "error": "No valid symptoms provided",
-                "diagnosis": [],
-                "disclaimer": "Cannot provide diagnosis without symptoms."
-            }
-        
-        # Normalize symptoms using fuzzy matching
-        matched_symptoms = self.fuzzy_match_symptoms(clean_symptoms)
-        
-        # Get background data
-        bg = background or {}
-        
-        # Primary LLM diagnosis
-        diagnosis_results = self._llm_diagnose(matched_symptoms, bg)
-        
-        # Format and return results
-        response_payload = self.format_results(diagnosis_results)
-        
-        # Add matched symptoms for reference
-        response_payload["analyzed_symptoms"] = matched_symptoms
-        response_payload["original_symptoms"] = clean_symptoms
-        
-        return response_payload
-
-    def get_system_status(self) -> Dict[str, Any]:
-        """Get current system status including LLM availability"""
-        return {
-            "primary_llm": {
-                "model": self.model,
-                "available": self.llm_client is not None,
-                "provider": f"LiteLLM ({self.model})",
-                "base_url": self.litellm_base_url
-            },
-            "symptom_validation": {
-                "available": bool(unique_symptoms),
-                "symptom_count": len(unique_symptoms) if unique_symptoms else 0
-            }
-        }
+            raise Exception(f"Diagnosis failed: {str(e)}")

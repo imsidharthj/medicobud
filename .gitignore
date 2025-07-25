@@ -28,3 +28,5 @@ dist-ssr
 
 # Netlify configuration
 netlify.toml
+.kiro
+.vscode
