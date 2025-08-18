@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class DiagnosisService:
     def __init__(self, dataset_path: str = None, weights_path: str = None):
         # Initialize LiteLLM client with LangChain
-        self.litellm_api_key = os.getenv("LITELLM_API_KEY")
-        self.litellm_base_url = os.getenv("LITELLM_BASE_URL", "https://litellm.xkcd.tech")
-        self.model = os.getenv("LITELLM_MODEL", "openai/gpt-4.1-mini")
+        self.litellm_api_key = os.getenv("OPENAI_API_KEY")
+        self.litellm_base_url = os.getenv("OPENAI_BASE_URL")
+        self.model = os.getenv("OPENAI_MODEL")
         
         if not self.litellm_api_key:
             self.llm_client = None
@@ -78,7 +78,8 @@ class DiagnosisService:
                 }}
             ],
             "treatment_plan": [
-                "Brief home remedy suggestions (e.g., hydration, rest, warm compresses, etc.) with web sources to read and search for it. Only include if symptoms are mild and there's no red flag."
+                "Brief home remedy suggestions with web sources to read and search for it. If the risk and urgency level is high, do suggest professional care.",
+                "give clickable links to read more about the condition and treatment options."
             ],
             "risk_assessment": {{
                 "urgency_level": "low | medium | high",
@@ -95,7 +96,7 @@ class DiagnosisService:
 
             ### IMPORTANT
             - Never invent or assume patient data not provided.
-            - Use only general, non-invasive treatment suggestions (no prescriptions or unverified remedies).
+            - Use symptom and disease specific non-invasive treatment suggestions (no prescriptions or unverified remedies).
             - Flag urgent or severe cases that may require immediate lab tests or professional care.
             """),
         ])
