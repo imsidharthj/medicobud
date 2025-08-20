@@ -57,22 +57,22 @@ def get_analyzer(api_key: str = None) -> LabReportAnalyzer:
     """Get or create analyzer instance with improved error handling"""
     global _analyzer_instance
     
-    litellm_api_key = api_key or os.getenv("LITELLM_API_KEY")
+    openai_api_key = api_key or os.getenv("OPENAI_API_KEY")
     
-    if not litellm_api_key:
+    if not openai_api_key:
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
         if deepseek_key:
-            logger.warning("LiteLLM API key not found, but DeepSeek fallback is available")
-            litellm_api_key = "placeholder-for-deepseek-fallback"
+            logger.warning("OpenAI API key not found, but DeepSeek fallback is available")
+            openai_api_key = "placeholder-for-deepseek-fallback"
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No AI API keys configured. Please set LITELLM_API_KEY or DEEPSEEK_API_KEY environment variable."
+                detail="No AI API keys configured. Please set OPENAI_API_KEY or DEEPSEEK_API_KEY environment variable."
             )
     
     if _analyzer_instance is None:
-        logger.info("Initializing Lab Report Analyzer with LiteLLM + DeepSeek fallback support...")
-        _analyzer_instance = LabReportAnalyzer(litellm_api_key)
+        logger.info("Initializing Lab Report Analyzer with OpenAI + DeepSeek fallback support...")
+        _analyzer_instance = LabReportAnalyzer(openai_api_key)
         
         try:
             system_status = _analyzer_instance.get_system_status()
@@ -272,10 +272,10 @@ async def analyze_lab_report_file(
 async def get_system_status():
     """Get comprehensive system status for lab analysis including model strategy"""
     try:
-        litellm_key = os.getenv("LITELLM_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
         
-        if not litellm_key and not deepseek_key:
+        if not openai_key and not deepseek_key:
             return SystemStatusResponse(
                 status="❌ No API Keys",
                 gpu_available=False,
@@ -284,10 +284,10 @@ async def get_system_status():
                 medcat_available=False,
                 spacy_available=False,
                 models_loaded={},
-                recommendations=["Set LITELLM_API_KEY or DEEPSEEK_API_KEY environment variable"]
+                recommendations=["Set OPENAI_API_KEY or DEEPSEEK_API_KEY environment variable"]
             )
         
-        test_key = litellm_key or "placeholder-for-deepseek-fallback"
+        test_key = openai_key or "placeholder-for-deepseek-fallback"
         temp_analyzer = LabReportAnalyzer(test_key)
         system_status = temp_analyzer.get_system_status()
         
@@ -295,7 +295,7 @@ async def get_system_status():
         ocr_info = system_status.get('ocr_info', {})
         llm_info = system_status.get('llm_info', {})
         
-        primary_available = bool(litellm_key)
+        primary_available = bool(openai_key)
         fallback_available = bool(deepseek_key)
         
         if primary_available and fallback_available:
@@ -307,7 +307,7 @@ async def get_system_status():
         
         recommendations = []
         if not primary_available:
-            recommendations.append("Set LITELLM_API_KEY for primary LLM (gemini/gemini-2.5-flash-preview-05-20)")
+            recommendations.append("Set OPENAI_API_KEY for primary LLM (gemini/gemini-2.5-flash-preview-05-20)")
         if not fallback_available:
             recommendations.append("Set DEEPSEEK_API_KEY for fallback reliability")
         if not ocr_info.get('ocr_space_configured', False):
@@ -351,7 +351,7 @@ async def check_analysis_system():
             "gpu_available": False,
             "device": "cpu",
             "environment_variables": {
-                "litellm_api_key_set": bool(os.getenv("LITELLM_API_KEY")),
+                "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
                 "deepseek_api_key_set": bool(os.getenv("DEEPSEEK_API_KEY")),
                 "ocr_space_api_key_set": bool(os.getenv("OCR_SPACE_API_KEY"))
             },
