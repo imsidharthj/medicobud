@@ -19,33 +19,33 @@ from .prompt_templates import PromptManager
 logger = logging.getLogger(__name__)
 
 class MedicalLLMClient:
-    """LLM client optimized for medical analysis with LiteLLM + DeepSeek fallback"""
+    """LLM client optimized for medical analysis with OpenAI + DeepSeek fallback"""
     
-    def __init__(self, litellm_api_key: str, model: str = "openai/gpt-4.1-mini"):
-        self.litellm_api_key = litellm_api_key
-        self.model = model
-        self.litellm_base_url = "https://litellm.xkcd.tech"
+    def __init__(self, openai_api_key: str = None, model: str = None):
+        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4")
+        self.openai_base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.prompt_manager = PromptManager()
         
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
         self.deepseek_model = "deepseek/deepseek-r1:free"
         self.deepseek_base_url = "https://openrouter.ai/api/v1"
         
-        self.llm = self._initialize_litellm_llm(model, litellm_api_key)
+        self.llm = self._initialize_openai_llm(self.model, self.openai_api_key)
         self.fallback_llm = self._initialize_deepseek_llm() if self.deepseek_api_key else None
         
-        logger.info(f"Medical LLM Client initialized with primary model: {model}")
+        logger.info(f"Medical LLM Client initialized with primary model: {self.model}")
         if self.fallback_llm:
             logger.info(f"DeepSeek fallback model configured: {self.deepseek_model}")
         else:
             logger.warning("DeepSeek fallback not available - DEEPSEEK_API_KEY not set")
     
-    def _initialize_litellm_llm(self, model: str, api_key: str) -> ChatOpenAI:
-        """Initialize LiteLLM with medical-optimized settings"""
+    def _initialize_openai_llm(self, model: str, api_key: str) -> ChatOpenAI:
+        """Initialize OpenAI with medical-optimized settings"""
         return ChatOpenAI(
             model=model,
             api_key=api_key,
-            base_url=self.litellm_base_url,
+            base_url=self.openai_base_url,
         )
     
     def _initialize_deepseek_llm(self) -> Optional[ChatOpenAI]:
@@ -71,7 +71,7 @@ class MedicalLLMClient:
     def _execute_with_fallback(self, chain_func, formatted_data: Dict[str, Any], operation: str) -> str:
         """Execute LLM operation with fallback to DeepSeek"""
         try:
-            logger.info(f"Attempting {operation} with LiteLLM ({self.model})")
+            logger.info(f"Attempting {operation} with OpenAI ({self.model})")
             
             try:
                 prompt_template = chain_func.__closure__[0].cell_contents if hasattr(chain_func, '__closure__') else None
@@ -92,7 +92,7 @@ class MedicalLLMClient:
                         response = str(llm_response)
                     
                     if response is None or not response.strip():
-                        raise ValueError("Empty response from direct LiteLLM call")
+                        raise ValueError("Empty response from direct OpenAI call")
                 
             except Exception as direct_error:
                 logger.warning(f"Direct invocation failed: {direct_error}, trying chain approach")
@@ -100,13 +100,13 @@ class MedicalLLMClient:
                 response = chain.invoke(formatted_data)
             
             if not response or not response.strip():
-                raise ValueError("Empty response from LiteLLM")
+                raise ValueError("Empty response from OpenAI")
             
-            logger.info(f"{operation} completed with LiteLLM")
+            logger.info(f"{operation} completed with OpenAI")
             return response
             
-        except Exception as litellm_error:
-            logger.warning(f"LiteLLM {operation} failed: {litellm_error}")
+        except Exception as openai_error:
+            logger.warning(f"OpenAI {operation} failed: {openai_error}")
             
             if self.fallback_llm:
                 try:
@@ -123,11 +123,11 @@ class MedicalLLMClient:
                 except Exception as deepseek_error:
                     logger.error(f"DeepSeek fallback {operation} failed: {deepseek_error}")
                     return self._generate_error_fallback(formatted_data, operation, 
-                                                       f"Both LiteLLM ({litellm_error}) and DeepSeek ({deepseek_error}) failed")
+                                                       f"Both OpenAI ({openai_error}) and DeepSeek ({deepseek_error}) failed")
             else:
                 logger.error(f"No fallback available for {operation}")
                 return self._generate_error_fallback(formatted_data, operation, 
-                                                   f"LiteLLM failed: {litellm_error}. DeepSeek fallback not configured.")
+                                                   f"OpenAI failed: {openai_error}. DeepSeek fallback not configured.")
     
     def analyze_lab_report(self, lab_data: Dict[str, Any]) -> str:
         """Comprehensive lab report analysis with direct response handling"""
@@ -153,12 +153,12 @@ class MedicalLLMClient:
                     response = str(llm_response)
                 
                 if not response or not response.strip():
-                    raise ValueError("Empty response from direct LiteLLM call")
+                    raise ValueError("Empty response from direct OpenAI call")
                 
-                logger.info(f"Direct LiteLLM call successful")
+                logger.info(f"Direct OpenAI call successful")
                 
             except Exception as direct_error:
-                logger.warning(f"Direct LiteLLM call failed: {direct_error}")
+                logger.warning(f"Direct OpenAI call failed: {direct_error}")
                 
                 if self.fallback_llm:
                     logger.info("Attempting with DeepSeek fallback")
@@ -175,11 +175,11 @@ class MedicalLLMClient:
                     except Exception as deepseek_error:
                         logger.error(f"DeepSeek fallback also failed: {deepseek_error}")
                         return self._generate_error_fallback(formatted_data, "comprehensive lab analysis", 
-                                                           f"Both LiteLLM ({direct_error}) and DeepSeek ({deepseek_error}) failed")
+                                                           f"Both OpenAI ({direct_error}) and DeepSeek ({deepseek_error}) failed")
                 else:
                     logger.error("No fallback available")
                     return self._generate_error_fallback(formatted_data, "comprehensive lab analysis", 
-                                                       f"LiteLLM failed: {direct_error}. DeepSeek fallback not configured.")
+                                                       f"OpenAI failed: {direct_error}. DeepSeek fallback not configured.")
             
             processing_time = (datetime.now() - start_time).total_seconds()
             logger.info(f"Comprehensive lab analysis completed in {processing_time:.2f} seconds")
@@ -198,15 +198,15 @@ class MedicalLLMClient:
 **Error**: {error_msg}
 
 ## System Status:
-- Primary LLM (LiteLLM): Failed
+- Primary LLM (OpenAI): Failed
 - Fallback LLM (DeepSeek): {"Failed" if self.fallback_llm else "Not configured"}
 
 ## Available Data:
 {json.dumps(formatted_data, indent=2) if formatted_data else "No data available"}
 
 ## Recommendations:
-1. Check your LITELLM_API_KEY and network connection
-2. Verify LiteLLM service status at {self.litellm_base_url}
+1. Check your OPENAI_API_KEY and network connection
+2. Verify OpenAI service status at {self.openai_base_url}
 3. Try again in a few minutes
 4. Contact support if the issue persists
 
@@ -223,7 +223,7 @@ class MedicalLLMClient:
 **Error**: {error}
 
 ## System Status:
-- Primary LLM (LiteLLM): Failed
+- Primary LLM (OpenAI): Failed
 - Fallback LLM (DeepSeek): {"Failed" if self.fallback_llm else "Not configured"}
 
 ## Extracted Lab Values:
@@ -256,7 +256,7 @@ class MedicalLLMClient:
 4. Try the analysis again later when services are restored
 
 ## Technical Support:
-- Check LITELLM_API_KEY configuration
+- Check OPENAI_API_KEY configuration
 - Verify network connectivity
 - Contact technical support if issues persist
 """
@@ -269,8 +269,8 @@ class MedicalLLMClient:
             "primary_llm": {
                 "model": self.model,
                 "available": True,
-                "provider": f"LiteLLM ({self.model})",
-                "base_url": self.litellm_base_url
+                "provider": f"OpenAI ({self.model})",
+                "base_url": self.openai_base_url
             },
             "fallback_llm": {
                 "model": self.deepseek_model,
@@ -282,9 +282,9 @@ class MedicalLLMClient:
         }
 
 if __name__ == "__main__":
-    api_key = os.getenv("LITELLM_API_KEY", "your-litellm-api-key-here")
+    api_key = os.getenv("OPENAI_API_KEY", "your-openai-api-key-here")
     
-    if api_key == "your-litellm-api-key-here":
+    if api_key == "your-openai-api-key-here":
         exit(1)
     
     client = MedicalLLMClient(api_key)

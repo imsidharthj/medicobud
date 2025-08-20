@@ -21,19 +21,19 @@ logger = logging.getLogger(__name__)
 class LabReportAnalyzer:
     """Complete Lab Report Analysis System"""
     
-    def __init__(self, litellm_api_key: str = None):
-        self.litellm_api_key = litellm_api_key or os.getenv("LITELLM_API_KEY")
+    def __init__(self, openai_api_key: str = None):
+        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         
         logger.info("Initializing Lab Report Analysis System")
         
         self.ocr_processor = OCRProcessor()
         self.prompt_manager = PromptManager()
         
-        if self.litellm_api_key and self.litellm_api_key != "your-litellm-api-key-here":
-            self.llm_client = MedicalLLMClient(self.litellm_api_key)
+        if self.openai_api_key and self.openai_api_key != "your-openai-api-key-here":
+            self.llm_client = MedicalLLMClient(self.openai_api_key)
         else:
             self.llm_client = None
-            logger.warning("LiteLLM API key not provided - LLM analysis unavailable")
+            logger.warning("OpenAI API key not provided - LLM analysis unavailable")
         
         logger.info("Lab Report Analyzer initialized successfully")
         
@@ -44,7 +44,7 @@ class LabReportAnalyzer:
             if not self.llm_client:
                 return {
                     "success": False,
-                    "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
+                    "error": "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or provide API key during initialization.",
                     "file_path": file_path,
                     "processing_time": (datetime.now() - start_time).total_seconds()
                 }
@@ -120,7 +120,7 @@ class LabReportAnalyzer:
         if not self.llm_client:
             return {
                 "success": False,
-                "error": "LiteLLM API key not configured. Please set LITELLM_API_KEY environment variable or provide API key during initialization.",
+                "error": "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or provide API key during initialization.",
                 "processing_time": 0
             }
         
@@ -227,7 +227,7 @@ class LabReportAnalyzer:
             },
             "llm_info": {
                 "model": self.llm_client.model if self.llm_client else None,
-                "api_configured": bool(self.litellm_api_key and self.litellm_api_key != "your-litellm_api_key-here")
+                "api_configured": bool(self.openai_api_key and self.openai_api_key != "your-openai-api-key-here")
             }
         }
 
@@ -243,9 +243,9 @@ class LabReportAnalyzer:
             validation["warnings"].append("OCR.space API key not configured - only Tesseract will be used")
             validation["recommendations"].append("Set OCR_SPACE_API_KEY environment variable for better OCR fallback")
         
-        if not self.litellm_api_key or self.litellm_api_key == "your-litellm-api-key-here":
-            validation["issues"].append("LiteLLM API key not configured")
-            validation["recommendations"].append("Set LITELLM_API_KEY environment variable")
+        if not self.openai_api_key or self.openai_api_key == "your-openai-api-key-here":
+            validation["issues"].append("OpenAI API key not configured")
+            validation["recommendations"].append("Set OPENAI_API_KEY environment variable")
             validation["overall_status"] = "❌ Configuration Issues"
         
         if validation["issues"]:
@@ -264,10 +264,10 @@ class LabReportAnalyzer:
         else:
             return "Tesseract only"
 
-def analyze_lab_report(file_path: str, litellm_api_key: str = None) -> Dict[str, Any]:
-    api_key = litellm_api_key or os.getenv("LITELLM_API_KEY")
+def analyze_lab_report(file_path: str, openai_api_key: str = None) -> Dict[str, Any]:
+    api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("LiteLLM API key required. Set LITELLM_API_KEY environment variable or pass as parameter.")
+        raise ValueError("OpenAI API key required. Set OPENAI_API_KEY environment variable or pass as parameter.")
     
     analyzer = LabReportAnalyzer(api_key)
     return analyzer.analyze_lab_report(file_path)
